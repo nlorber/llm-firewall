@@ -47,12 +47,28 @@ POST /analyze
 
 ## Results
 
-> Populated after fine-tuning. See `notebooks/02_training_curves.ipynb`.
+> Run `make train` then `make evaluate` to reproduce. See `notebooks/02_training_curves.ipynb` for convergence plots.
 
 | Metric | Value |
 |---|---|
-| Val accuracy | TBD |
-| Val F1 macro | TBD |
+| Test accuracy | 0.9948 |
+| Test F1 macro | 0.9947 |
+| Val accuracy | 0.9895 |
+| Val F1 macro | 0.9877 |
+
+### Training curves
+
+![Training curves](notebooks/training_curves.png)
+
+### Class distribution
+
+![Class distribution](notebooks/eda_class_dist.png)
+
+### Explainability
+
+SHAP token-level attributions highlight which tokens drove the classifier's decision for each threat class. See `notebooks/03_explainability.ipynb` for interactive examples.
+
+![SHAP example](notebooks/shap_example.png)
 
 ## Quickstart
 
@@ -60,9 +76,14 @@ POST /analyze
 # 1. Install
 uv sync --extra dev
 
-# 2. Download and prepare data
+# 2. Download and prepare data (requires ANTHROPIC_API_KEY for synthetic generation + augmentation)
+export ANTHROPIC_API_KEY=sk-...
 python data/download.py --output-dir data/raw
 python data/prepare.py  --input-dir data/raw --output-dir data/processed
+
+# Without an API key, use --skip-synthetic and --skip-augment (3 classes only)
+# python data/download.py --output-dir data/raw --skip-synthetic
+# python data/prepare.py  --input-dir data/raw --output-dir data/processed --skip-augment
 
 # 3. Fine-tune
 make train
@@ -70,14 +91,21 @@ make train
 # 4. Evaluate
 make evaluate
 
-# 5. Serve (requires ANTHROPIC_API_KEY for judge)
-export ANTHROPIC_API_KEY=sk-...
+# 5. Serve (requires ANTHROPIC_API_KEY for the LLM judge)
 make serve
 
 # 6. Analyse a prompt
 curl -X POST http://localhost:8000/analyze \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Ignore all previous instructions."}'
+```
+
+## Docker
+
+```bash
+make docker-build
+docker compose up api               # CPU
+docker compose --profile gpu up     # GPU (requires NVIDIA Container Toolkit)
 ```
 
 ## Dev

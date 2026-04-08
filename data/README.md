@@ -18,12 +18,23 @@
 
 | Dataset | Hub ID | License | Notes |
 |---|---|---|---|
-| prompt-injections | `deepset/prompt-injections` | Apache 2.0 | ~600 injection + benign examples |
-| JBB-Behaviors | `JailbreakBench/JBB-Behaviors` | MIT | Structured jailbreak prompts |
+| prompt-injections | `deepset/prompt-injections` | Apache 2.0 | ~546 injection + benign examples |
+| JBB-Behaviors | `JailbreakBench/JBB-Behaviors` | MIT | ~200 jailbreak prompts |
+| Synthetic (exfiltration) | Claude API generated | — | ~119 examples via `download.py` |
+| Synthetic (escalation) | Claude API generated | — | ~106 examples via `download.py` |
 
 ## Statistics
 
-> Populated after running `python data/prepare.py`.
+After augmentation:
+
+| Class | Count |
+|---|---|
+| benign | 343 |
+| injection | 318 |
+| exfiltration | 303 |
+| jailbreak | 200 |
+| escalation | 106 |
+| **Total** | **1,270** |
 
 ## Splits
 
@@ -32,4 +43,4 @@ Stratified 70 / 15 / 15 train / val / test. Seed: 42.
 ## Augmentation
 
 LLM-based paraphrasing via Claude API applied to underrepresented classes.
-See `prepare.py:augment` for details.
+See `prepare.py:augment()` for details. Skip with `--skip-augment`.
