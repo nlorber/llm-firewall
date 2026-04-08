@@ -25,6 +25,10 @@ test:
 lint:
 	uv run ruff check src/ tests/ data/
 
+## Run mypy strict type checking on source files
+typecheck:
+	uv run mypy --strict src/
+
 ## Apply ruff formatter across source, tests, and data scripts
 format:
 	uv run ruff format src/ tests/ data/
