@@ -1,6 +1,7 @@
 # src/firewall/api/app.py
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,7 @@ def _load_config() -> dict[str, Any]:
     serving = yaml.safe_load(Path("configs/serving.yaml").read_text())
     orch    = yaml.safe_load(Path("configs/orchestrator.yaml").read_text())
     return {
-        "model_path":       serving["model_path"],
+        "model_path":       os.environ.get("MODEL_PATH", serving["model_path"]),
         "clean_threshold":  orch["clean_threshold"],
         "block_threshold":  orch["block_threshold"],
         "judge_model":      orch["judge_model"],
