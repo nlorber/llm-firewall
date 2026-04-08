@@ -47,7 +47,7 @@ def plot_attention_heatmap(
     head: int = 0,
 ) -> None:
     """Render a matplotlib attention heatmap for a single input."""
-    import matplotlib.pyplot as plt  # type: ignore[import-not-found]  # matplotlib stubs not installed
+    import matplotlib.pyplot as plt
     import torch
 
     tokenizer = model.tokenizer
