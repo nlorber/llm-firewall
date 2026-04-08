@@ -1,34 +1,41 @@
-"""SHAP-based explainability for the firewall classifier.
-
-Provides token-level attribution scores and attention heatmaps to explain
-individual predictions. Used in Phase 3 and ``notebooks/03_explainability.ipynb``.
-"""
+# src/firewall/classifier/explain.py
 from __future__ import annotations
 
 import numpy as np
+import shap
 
 
 class SHAPExplainer:
-    """Wraps ``shap.Explainer`` for token-level attribution on the classifier.
-
-    Args:
-        model: Loaded :class:`~firewall.classifier.model.FirewallClassifier`.
-        max_evals: Maximum SHAP evaluations per example (speed vs. accuracy trade-off).
-    """
+    """Token-level SHAP attributions for the firewall classifier."""
 
     def __init__(self, model: object, max_evals: int = 500) -> None:
-        raise NotImplementedError
+        self._model = model
 
-    def explain(self, texts: list[str]) -> list[dict[str, np.ndarray]]:
-        """Compute SHAP values for a batch of prompts.
+        def _predict_proba(texts: list[str]) -> np.ndarray:
+            results = model.predict(list(texts))
+            return np.array([[v for v in r.values()] for r in results])
 
-        Args:
-            texts: Raw prompt strings.
+        self._explainer = shap.Explainer(
+            _predict_proba,
+            shap.maskers.Text(r"\W+"),
+            max_evals=max_evals,
+        )
+
+    def explain(self, texts: list[str]) -> list[dict]:
+        """Return SHAP values and tokens for each text.
 
         Returns:
-            List of dicts mapping token string → SHAP value array (one value per class).
+            List of dicts with keys ``tokens`` (array of token strings) and
+            ``shap_values`` (ndarray shape [n_tokens, n_classes]).
         """
-        raise NotImplementedError
+        shap_values = self._explainer(texts)
+        results = []
+        for i in range(len(texts)):
+            results.append({
+                "tokens":      shap_values.data[i],
+                "shap_values": shap_values.values[i],
+            })
+        return results
 
 
 def plot_attention_heatmap(
@@ -37,12 +44,27 @@ def plot_attention_heatmap(
     layer: int = -1,
     head: int = 0,
 ) -> None:
-    """Render a matplotlib attention heatmap for the given input.
+    """Render a matplotlib attention heatmap for a single input."""
+    import matplotlib.pyplot as plt
+    import torch
 
-    Args:
-        text: Input prompt string.
-        model: Loaded :class:`~firewall.classifier.model.FirewallClassifier`.
-        layer: Transformer layer index to visualise (default: last layer).
-        head: Attention head index.
-    """
-    raise NotImplementedError
+    tokenizer = model.tokenizer
+    tokens = tokenizer.tokenize(text)
+
+    encoding = tokenizer(text, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        outputs = model.model(**encoding, output_attentions=True)
+
+    attn = outputs.attentions[layer][0, head].cpu().numpy()
+
+    n = len(tokens)
+    fig, ax = plt.subplots(figsize=(max(6, n // 2), max(6, n // 2)))
+    im = ax.imshow(attn[:n, :n], cmap="Blues")
+    ax.set_xticks(range(n))
+    ax.set_yticks(range(n))
+    ax.set_xticklabels(tokens, rotation=90, fontsize=8)
+    ax.set_yticklabels(tokens, fontsize=8)
+    ax.set_title(f"Attention layer {layer} head {head}")
+    plt.colorbar(im, ax=ax)
+    plt.tight_layout()
+    plt.show()

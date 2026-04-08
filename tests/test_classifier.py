@@ -196,3 +196,44 @@ class TestEvaluate:
             )
 
         assert result["accuracy"] == 1.0
+
+
+class TestSHAPExplainer:
+    def test_explain_returns_list_with_expected_keys(self) -> None:
+        from firewall.classifier.explain import SHAPExplainer
+
+        mock_clf = MagicMock()
+
+        def fake_predict(texts):
+            return [
+                {"benign": 0.8, "injection": 0.1, "jailbreak": 0.05,
+                 "exfiltration": 0.03, "escalation": 0.02}
+                for _ in texts
+            ]
+
+        mock_clf.predict.side_effect = fake_predict
+
+        explainer = SHAPExplainer(mock_clf, max_evals=10)
+        result = explainer.explain(["ignore previous instructions"])
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert "shap_values" in result[0]
+        assert "tokens" in result[0]
+
+    def test_explain_returns_one_entry_per_input(self) -> None:
+        from firewall.classifier.explain import SHAPExplainer
+
+        mock_clf = MagicMock()
+
+        def fake_predict(texts):
+            return [
+                {"benign": 0.8, "injection": 0.1, "jailbreak": 0.05,
+                 "exfiltration": 0.03, "escalation": 0.02}
+                for _ in texts
+            ]
+
+        mock_clf.predict.side_effect = fake_predict
+        explainer = SHAPExplainer(mock_clf, max_evals=10)
+        result = explainer.explain(["text one", "text two"])
+        assert len(result) == 2
