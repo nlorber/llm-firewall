@@ -6,8 +6,10 @@ import json
 from pathlib import Path
 
 import numpy as np
+import torch
 import yaml
 from sklearn.metrics import accuracy_score, f1_score
+from sklearn.utils.class_weight import compute_class_weight
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -63,6 +65,10 @@ def train(config_path: str | Path) -> None:
     train_ds = FirewallDataset(train_texts, train_labels, tokenizer_name, config["max_length"])
     val_ds   = FirewallDataset(val_texts, val_labels, tokenizer_name, config["max_length"])
 
+    # Compute inverse-frequency class weights to handle imbalanced data
+    weights = compute_class_weight("balanced", classes=np.arange(config["num_labels"]), y=np.array(train_labels))
+    class_weights = torch.tensor(weights, dtype=torch.float32)
+
     training_args = TrainingArguments(
         output_dir=config["output_dir"],
         num_train_epochs=config["num_epochs"],
@@ -81,7 +87,17 @@ def train(config_path: str | Path) -> None:
         report_to="none",
     )
 
-    trainer = Trainer(
+    class WeightedTrainer(Trainer):
+        """Trainer subclass that applies class weights to the cross-entropy loss."""
+
+        def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+            labels = inputs.pop("labels")
+            outputs = model(**inputs)
+            logits = outputs.logits
+            loss = torch.nn.functional.cross_entropy(logits, labels, weight=class_weights.to(logits.device))
+            return (loss, outputs) if return_outputs else loss
+
+    trainer = WeightedTrainer(
         model=model,
         args=training_args,
         train_dataset=train_ds,

@@ -26,16 +26,17 @@ def download_jailbreak_bench(output_dir: Path) -> None:
     Uses the 'Goal' column as the jailbreak prompt text.
     Schema: {"text": str, "label": "jailbreak"}
     """
-    ds = load_dataset("JailbreakBench/JBB-Behaviors", split="train")
+    ds = load_dataset("JailbreakBench/JBB-Behaviors", "behaviors")
     output_path = output_dir / "jailbreak_bench.jsonl"
     count = 0
     with output_path.open("w") as f:
-        for row in ds:
-            text = row.get("Goal") or row.get("Behavior") or row.get("goal") or ""
-            if not text:
-                continue
-            f.write(json.dumps({"text": text, "label": "jailbreak"}) + "\n")
-            count += 1
+        for split in ds.values():
+            for row in split:
+                text = row.get("Goal") or row.get("Behavior") or row.get("goal") or ""
+                if not text:
+                    continue
+                f.write(json.dumps({"text": text, "label": "jailbreak"}) + "\n")
+                count += 1
     print(f"[download] jailbreak-bench: {count} records → {output_path}")
 
 
@@ -85,7 +86,11 @@ def generate_synthetic(
             ),
         }],
     )
-    examples: list[str] = json.loads(message.content[0].text)
+    raw_text = message.content[0].text.strip()
+    # Strip markdown code fences if the model wraps the JSON
+    if raw_text.startswith("```"):
+        raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    examples: list[str] = json.loads(raw_text)
 
     output_path = output_dir / f"synthetic_{label}.jsonl"
     with output_path.open("w") as f:

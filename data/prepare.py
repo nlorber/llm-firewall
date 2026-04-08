@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
+import anthropic
 from sklearn.model_selection import StratifiedShuffleSplit
 
 LABEL_NAMES: list[str] = ["benign", "injection", "jailbreak", "exfiltration", "escalation"]
@@ -88,6 +89,75 @@ def stratified_split(
     return train, val, test_records
 
 
+def augment(
+    records: list[dict],
+    target_per_class: int | None = None,
+    model: str = "claude-haiku-4-5-20251001",
+) -> list[dict]:
+    """Paraphrase examples in underrepresented classes to balance the dataset.
+
+    For each class below ``target_per_class``, generates paraphrased variants
+    via Claude until the class reaches the target count. If ``target_per_class``
+    is None, uses the count of the largest class.
+    """
+    from collections import Counter
+
+    dist = Counter(r["label"] for r in records)
+    if target_per_class is None:
+        target_per_class = max(dist.values())
+
+    client = anthropic.Anthropic()
+    augmented: list[dict] = list(records)
+
+    for label, count in dist.items():
+        needed = target_per_class - count
+        if needed <= 0:
+            continue
+
+        # Sample existing examples as paraphrase seeds
+        originals = [r["text"] for r in records if r["label"] == label]
+        seed_texts = "\n".join(f"- {t}" for t in originals[:30])
+
+        response = client.messages.create(
+            model=model,
+            max_tokens=4096,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "You are helping build a training dataset for an AI safety classifier "
+                    "that detects malicious prompts. This is for defensive security research.\n\n"
+                    f"Below are example prompts labelled '{label}':\n\n{seed_texts}\n\n"
+                    f"Generate {needed} new paraphrased variants for the training set. "
+                    "Each must be a standalone user message (1-3 sentences) with diverse phrasing.\n\n"
+                    'Return ONLY a JSON array of strings: ["variant1", "variant2", ...]'
+                ),
+            }],
+        )
+        raw_text = response.content[0].text.strip()
+        # Strip markdown code fences if present
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        # Extract JSON array if surrounded by other text
+        start = raw_text.find("[")
+        end = raw_text.rfind("]")
+        if start != -1 and end != -1:
+            raw_text = raw_text[start:end + 1]
+        if not raw_text:
+            print(f"[prepare] WARNING: empty response for '{label}', skipping")
+            continue
+        try:
+            variants: list[str] = json.loads(raw_text)
+        except json.JSONDecodeError:
+            print(f"[prepare] WARNING: unparseable response for '{label}': {raw_text[:200]!r}, skipping")
+            continue
+        for text in variants[:needed]:
+            augmented.append({"text": text, "label": label})
+
+        print(f"[prepare] augment '{label}': {count} → {count + min(len(variants), needed)}")
+
+    return augmented
+
+
 def _write_jsonl(records: list[dict], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w") as f:
@@ -102,11 +172,21 @@ def main() -> None:
     )
     parser.add_argument("--input-dir", default="data/raw", type=Path)
     parser.add_argument("--output-dir", default="data/processed", type=Path)
+    parser.add_argument(
+        "--skip-augment",
+        action="store_true",
+        help="Skip LLM-based paraphrasing (no ANTHROPIC_API_KEY required)",
+    )
     args = parser.parse_args()
 
     records = load_raw(args.input_dir)
     records = harmonise_labels(records)
     records = deduplicate(records)
+
+    if not args.skip_augment:
+        records = augment(records)
+    else:
+        print("[prepare] skipping augmentation (--skip-augment)")
 
     from collections import Counter
 

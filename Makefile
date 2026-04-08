@@ -1,4 +1,4 @@
-.PHONY: install train evaluate serve test lint format clean
+.PHONY: install train evaluate serve test lint format clean docker-build
 
 ## Install all dependencies with uv and set up pre-commit hooks
 install:
@@ -28,6 +28,10 @@ lint:
 ## Apply ruff formatter across source, tests, and data scripts
 format:
 	uv run ruff format src/ tests/ data/
+
+## Build Docker image
+docker-build:
+	docker build -t llm-firewall .
 
 ## Remove build artifacts, caches, and compiled files
 clean:

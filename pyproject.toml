@@ -35,6 +35,10 @@ dependencies = [
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.3,<3",
     "pyyaml>=6.0,<7",
+    # Tokenizer + training runtime
+    "protobuf>=5.0,<8",
+    "sentencepiece>=0.2,<1",
+    "accelerate>=0.26,<2",
 ]
 
 [project.optional-dependencies]
