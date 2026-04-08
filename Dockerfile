@@ -1,10 +1,10 @@
 # ── Builder stage: install all runtime dependencies ───────────────────────────
-FROM ghcr.io/astral-sh/uv:python3.11-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
 
 WORKDIR /app
 
 # Copy only what uv needs to resolve and install deps
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 COPY src/ ./src/
 
 # Install project + runtime deps (no dev extras), frozen to lockfile
