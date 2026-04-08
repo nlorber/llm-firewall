@@ -1,6 +1,7 @@
 # src/firewall/api/app.py
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -34,14 +35,9 @@ def _load_config() -> dict[str, Any]:
 
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
-    app = FastAPI(
-        title="LLM Firewall",
-        description="Prompt threat classification and routing via DeBERTa + LangGraph",
-        version="0.1.0",
-    )
 
-    @app.on_event("startup")
-    async def startup() -> None:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):  # type: ignore[type-arg]
         config = _load_config()
         classifier = load_classifier(config["model_path"])
         judge = LLMJudge(
@@ -56,6 +52,14 @@ def create_app() -> FastAPI:
             block_threshold=config["block_threshold"],
         )
         app.state.model_loaded = True
+        yield
+
+    app = FastAPI(
+        title="LLM Firewall",
+        description="Prompt threat classification and routing via DeBERTa + LangGraph",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
 
     @app.post("/analyze", response_model=AnalysisResponse)
     async def analyze(request: AnalysisRequest) -> AnalysisResponse:
