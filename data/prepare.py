@@ -1,58 +1,62 @@
-"""Prepare the merged dataset for training: clean, deduplicate, split, augment.
-
-Usage::
-
-    python data/prepare.py --input-dir data/raw --output-dir data/processed
-
-Pipeline:
-    1. Load and merge all raw JSONL files from ``data/raw/``
-    2. Harmonise heterogeneous label strings to the canonical 5-class taxonomy
-    3. Deduplicate on normalised text (lowercased, stripped)
-    4. Stratified train / val / test split (70 / 15 / 15, seed 42)
-    5. Optional: LLM-based paraphrase augmentation for underrepresented classes
-    6. Write ``train.jsonl``, ``val.jsonl``, ``test.jsonl`` to ``data/processed/``
-"""
+# data/prepare.py
 from __future__ import annotations
 
+import argparse
+import json
 from pathlib import Path
+
+from sklearn.model_selection import StratifiedShuffleSplit
 
 LABEL_NAMES: list[str] = ["benign", "injection", "jailbreak", "exfiltration", "escalation"]
 
+# Maps raw label values (as strings) from each source to canonical LABEL_NAMES
+_LABEL_MAP: dict[str, str] = {
+    "0": "benign",
+    "1": "injection",
+    "benign": "benign",
+    "injection": "injection",
+    "jailbreak": "jailbreak",
+    "exfiltration": "exfiltration",
+    "escalation": "escalation",
+}
+
 
 def load_raw(input_dir: Path) -> list[dict]:
-    """Load and merge all JSONL files from *input_dir*.
-
-    Args:
-        input_dir: Directory containing raw ``.jsonl`` files.
-
-    Returns:
-        List of dicts with at least ``text`` and ``label`` keys.
-    """
-    raise NotImplementedError
+    """Load and merge all JSONL files from input_dir."""
+    records: list[dict] = []
+    for path in sorted(input_dir.glob("*.jsonl")):
+        with path.open() as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    records.append(json.loads(line))
+    print(f"[prepare] loaded {len(records)} raw records from {input_dir}")
+    return records
 
 
 def harmonise_labels(records: list[dict]) -> list[dict]:
-    """Map source-specific label strings to the canonical 5-class taxonomy.
-
-    Args:
-        records: Raw records with heterogeneous label strings.
-
-    Returns:
-        Records with ``label`` values restricted to :data:`LABEL_NAMES`.
-    """
-    raise NotImplementedError
+    """Map source-specific label strings to the canonical 5-class taxonomy."""
+    result = []
+    for r in records:
+        raw = str(r["label"]).strip().lower()
+        if raw not in _LABEL_MAP:
+            raise ValueError(f"unknown label '{r['label']}' in record: {r['text'][:60]!r}")
+        result.append({**r, "label": _LABEL_MAP[raw]})
+    return result
 
 
 def deduplicate(records: list[dict]) -> list[dict]:
-    """Remove duplicate records based on normalised (lowercased, stripped) text.
-
-    Args:
-        records: List of labelled records.
-
-    Returns:
-        Deduplicated list preserving the first occurrence.
-    """
-    raise NotImplementedError
+    """Remove duplicates by normalised (lowercased, stripped) text, keep first."""
+    seen: set[str] = set()
+    result: list[dict] = []
+    for r in records:
+        key = r["text"].lower().strip()
+        if key not in seen:
+            seen.add(key)
+            result.append(r)
+    before = len(records)
+    print(f"[prepare] dedup: {before} → {len(result)} records ({before - len(result)} removed)")
+    return result
 
 
 def stratified_split(
@@ -61,44 +65,59 @@ def stratified_split(
     test_ratio: float = 0.15,
     seed: int = 42,
 ) -> tuple[list[dict], list[dict], list[dict]]:
-    """Split records into train / val / test while preserving class distribution.
+    """Stratified train/val/test split preserving class distribution."""
+    texts = [r["text"] for r in records]
+    labels = [r["label"] for r in records]
 
-    Args:
-        records: Full labelled dataset.
-        val_ratio: Fraction of data for validation set.
-        test_ratio: Fraction of data for test set.
-        seed: Random seed for reproducibility.
+    # First split: carve off test set
+    sss1 = StratifiedShuffleSplit(n_splits=1, test_size=test_ratio, random_state=seed)
+    trainval_idx, test_idx = next(sss1.split(texts, labels))
 
-    Returns:
-        Tuple of ``(train, val, test)`` record lists.
-    """
-    raise NotImplementedError
+    trainval_records = [records[i] for i in trainval_idx]
+    test_records = [records[i] for i in test_idx]
+
+    # Second split: carve val out of trainval
+    adjusted_val = val_ratio / (1 - test_ratio)
+    tv_texts = [r["text"] for r in trainval_records]
+    tv_labels = [r["label"] for r in trainval_records]
+    sss2 = StratifiedShuffleSplit(n_splits=1, test_size=adjusted_val, random_state=seed)
+    train_idx, val_idx = next(sss2.split(tv_texts, tv_labels))
+
+    train = [trainval_records[i] for i in train_idx]
+    val = [trainval_records[i] for i in val_idx]
+    return train, val, test_records
 
 
-def augment(
-    records: list[dict],
-    target_class: str,
-    n_variants: int = 3,
-) -> list[dict]:
-    """Generate paraphrase variants for *target_class* via LLM augmentation.
-
-    Uses the Claude API to produce semantically equivalent but lexically diverse
-    examples. Caller is responsible for merging returned records into the dataset.
-
-    Args:
-        records: Existing labelled records for *target_class*.
-        target_class: Label string of the underrepresented class.
-        n_variants: Number of paraphrases to generate per source example.
-
-    Returns:
-        New augmented records (not merged — caller decides inclusion strategy).
-    """
-    raise NotImplementedError
+def _write_jsonl(records: list[dict], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as f:
+        for r in records:
+            f.write(json.dumps(r) + "\n")
+    print(f"[prepare] wrote {len(records)} records → {path}")
 
 
 def main() -> None:
-    """CLI entry point: parse arguments and run the full preparation pipeline."""
-    raise NotImplementedError
+    parser = argparse.ArgumentParser(
+        description="Prepare merged dataset for training"
+    )
+    parser.add_argument("--input-dir", default="data/raw", type=Path)
+    parser.add_argument("--output-dir", default="data/processed", type=Path)
+    args = parser.parse_args()
+
+    records = load_raw(args.input_dir)
+    records = harmonise_labels(records)
+    records = deduplicate(records)
+
+    from collections import Counter
+
+    dist = Counter(r["label"] for r in records)
+    print("[prepare] class distribution:", dict(dist))
+
+    train, val, test = stratified_split(records)
+
+    _write_jsonl(train, args.output_dir / "train.jsonl")
+    _write_jsonl(val, args.output_dir / "val.jsonl")
+    _write_jsonl(test, args.output_dir / "test.jsonl")
 
 
 if __name__ == "__main__":
