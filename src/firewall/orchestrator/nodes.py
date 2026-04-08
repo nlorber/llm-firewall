@@ -1,97 +1,134 @@
-"""LangGraph node implementations for the firewall routing graph.
-
-Each node is a function ``(state: FirewallState) -> dict`` that returns a
-partial state update. Nodes are composed into the graph in
-:mod:`firewall.orchestrator.graph`.
-
-Nodes:
-    classify_node  — runs DeBERTa inference and assigns a threat zone
-    judge_node     — invokes the LLM judge for GRAY zone prompts
-    execute_node   — finalises a PASS decision
-    log_node       — records a structured BLOCK event and finalises the decision
-
-Conditional edge helpers:
-    route_after_classify  — maps zone to the next node
-    route_after_judge     — maps judge decision to the next node
-"""
+# src/firewall/orchestrator/nodes.py
 from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from firewall.classifier.model import FirewallClassifier
+    from firewall.judge.judge import LLMJudge
 
 from firewall.orchestrator.state import FirewallState
 
+# Module-level state — populated by init_nodes() before building the graph
+_classifier: FirewallClassifier | None = None
+_judge: LLMJudge | None = None
+_clean_threshold: float = 0.3
+_block_threshold: float = 0.8
+
+
+def init_nodes(
+    classifier: FirewallClassifier,
+    judge: LLMJudge,
+    clean_threshold: float = 0.3,
+    block_threshold: float = 0.8,
+) -> None:
+    """Inject shared resources before building the graph. Call once at startup."""
+    global _classifier, _judge, _clean_threshold, _block_threshold
+    _classifier = classifier
+    _judge = judge
+    _clean_threshold = clean_threshold
+    _block_threshold = block_threshold
+
 
 def classify_node(state: FirewallState) -> dict:
-    """Run the fine-tuned classifier and assign a threat zone.
+    """Run classifier and assign zone."""
+    assert _classifier is not None, "call init_nodes() before using the graph"
+    results = _classifier.predict([state["prompt"]])
+    scores = results[0]
+    top_label = max(scores, key=scores.__getitem__)
+    top_score = scores[top_label]
+    label_names = list(scores.keys())
+    label2id = {lbl: i for i, lbl in enumerate(label_names)}
 
-    Zone assignment (thresholds from ``configs/orchestrator.yaml``):
-    - ``top_score < clean_threshold``  → CLEAN → pass immediately
-    - ``clean_threshold ≤ top_score < block_threshold`` → GRAY → route to judge
-    - ``top_score ≥ block_threshold``  → BLOCK → block immediately
+    if top_score >= _block_threshold:
+        zone = "BLOCK"
+    elif top_score >= _clean_threshold:
+        zone = "GRAY"
+    else:
+        zone = "CLEAN"
 
-    Args:
-        state: Current graph state (requires ``prompt``).
-
-    Returns:
-        Partial update with ``classification`` and ``zone``.
-    """
-    raise NotImplementedError
+    return {
+        "classification": {
+            "label":     top_label,
+            "label_id":  label2id[top_label],
+            "scores":    scores,
+            "top_score": top_score,
+        },
+        "zone": zone,
+    }
 
 
 def judge_node(state: FirewallState) -> dict:
-    """Invoke the LLM judge for GRAY zone prompts.
-
-    Args:
-        state: Current graph state (requires ``prompt`` and ``classification``).
-
-    Returns:
-        Partial update with ``judge_result``.
-    """
-    raise NotImplementedError
+    """Invoke LLM judge for GRAY zone prompts."""
+    assert _judge is not None, "call init_nodes() before using the graph"
+    clf = state["classification"]
+    verdict = _judge.judge(
+        prompt=state["prompt"],
+        classification_label=clf["label"],
+        scores=clf["scores"],
+    )
+    return {
+        "judge_result": {
+            "decision":   verdict.decision,
+            "reasoning":  verdict.reasoning,
+            "confidence": verdict.confidence,
+        }
+    }
 
 
 def execute_node(state: FirewallState) -> dict:
-    """Finalise a PASS decision and compose a human-readable explanation.
-
-    Args:
-        state: Current graph state.
-
-    Returns:
-        Partial update with ``final_decision = "PASS"`` and ``explanation``.
-    """
-    raise NotImplementedError
+    """Finalise a PASS decision."""
+    clf = state.get("classification") or {}
+    label = clf.get("label", "unknown")
+    score = clf.get("top_score", 0.0)
+    explanation = f"Prompt classified as '{label}' (score {score:.2f}) — below block threshold. PASS."
+    return {"final_decision": "PASS", "explanation": explanation}
 
 
 def log_node(state: FirewallState) -> dict:
-    """Append a structured BLOCK log entry and finalise the decision.
+    """Append a structured block event and finalise a BLOCK decision."""
+    clf = state.get("classification") or {}
+    judge_result = state.get("judge_result")
 
-    Args:
-        state: Current graph state.
+    if judge_result:
+        explanation = (
+            f"LLM judge decision: BLOCK. Reasoning: {judge_result['reasoning']}"
+        )
+    else:
+        label = clf.get("label", "unknown")
+        score = clf.get("top_score", 0.0)
+        explanation = f"Prompt classified as '{label}' (score {score:.2f}) — above block threshold. BLOCK."
 
-    Returns:
-        Partial update with ``final_decision = "BLOCK"``, ``explanation``,
-        and an appended entry in ``logs``.
-    """
-    raise NotImplementedError
+    log_entry: dict[str, Any] = {
+        "timestamp":    datetime.now(UTC).isoformat(),
+        "prompt":       state["prompt"],
+        "zone":         state.get("zone"),
+        "label":        clf.get("label"),
+        "top_score":    clf.get("top_score"),
+        "judge_result": judge_result,
+        "explanation":  explanation,
+    }
+
+    existing_logs: list = list(state.get("logs") or [])
+    return {
+        "final_decision": "BLOCK",
+        "explanation":    explanation,
+        "logs":           existing_logs + [log_entry],
+    }
 
 
 def route_after_classify(state: FirewallState) -> str:
-    """Conditional edge: select the next node based on the assigned zone.
-
-    Args:
-        state: Current graph state (requires ``zone``).
-
-    Returns:
-        One of ``"execute_node"``, ``"judge_node"``, or ``"log_node"``.
-    """
-    raise NotImplementedError
+    """Map zone to next node."""
+    zone = state["zone"]
+    if zone == "CLEAN":
+        return "execute_node"
+    if zone == "GRAY":
+        return "judge_node"
+    return "log_node"  # BLOCK
 
 
 def route_after_judge(state: FirewallState) -> str:
-    """Conditional edge: select the next node based on the judge's decision.
-
-    Args:
-        state: Current graph state (requires ``judge_result``).
-
-    Returns:
-        Either ``"execute_node"`` or ``"log_node"``.
-    """
-    raise NotImplementedError
+    """Map judge decision to next node."""
+    decision = state["judge_result"]["decision"]
+    return "execute_node" if decision == "PASS" else "log_node"
