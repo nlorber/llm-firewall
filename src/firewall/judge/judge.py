@@ -55,6 +55,7 @@ class LLMJudge:
         )
 
         last_exc: Exception | None = None
+        raw: str = ""
         for _attempt in range(self._retry_count + 1):
             response = self._client.messages.create(
                 model=self._model,
@@ -62,15 +63,15 @@ class LLMJudge:
                 system=_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_message}],
             )
-            raw = response.content[0].text.strip()
             try:
+                raw = response.content[0].text.strip()
                 data = json.loads(raw)
                 return JudgeVerdict(
                     decision=data["decision"],
                     reasoning=data["reasoning"],
                     confidence=float(data["confidence"]),
                 )
-            except (json.JSONDecodeError, KeyError, ValueError) as exc:
+            except (json.JSONDecodeError, KeyError, ValueError, IndexError, AttributeError) as exc:
                 last_exc = exc
 
         raise ValueError(

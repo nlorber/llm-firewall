@@ -59,3 +59,5 @@ class TestLLMJudge:
 
         with pytest.raises(ValueError, match="failed to parse judge response"):
             judge.judge("x", "injection", {"injection": 0.5})
+
+        assert judge._client.messages.create.call_count == 3
