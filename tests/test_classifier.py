@@ -64,3 +64,84 @@ class TestFirewallDataset:
             ds = FirewallDataset(["x"], tokenizer_name="dummy/tokenizer")
 
         assert "labels" not in ds[0]
+
+
+class TestFirewallClassifier:
+    def _make_mock_classifier(self):
+        """Return a FirewallClassifier with all HF calls mocked out."""
+        from firewall.classifier.model import FirewallClassifier
+
+        with patch("firewall.classifier.model.AutoModelForSequenceClassification") as mock_m, \
+             patch("firewall.classifier.model.AutoTokenizer") as mock_t:
+
+            mock_model_inst = MagicMock()
+            mock_model_inst.config.id2label = {
+                0: "benign", 1: "injection", 2: "jailbreak",
+                3: "exfiltration", 4: "escalation",
+            }
+            # Make .to() and .eval() return the same mock so clf.model == mock_model_inst
+            mock_model_inst.to.return_value = mock_model_inst
+            mock_model_inst.eval.return_value = mock_model_inst
+            mock_logits = torch.tensor([[1.0, 0.1, 0.1, 0.1, 0.1]])
+            mock_model_inst.return_value.logits = mock_logits
+            mock_m.from_pretrained.return_value = mock_model_inst
+
+            mock_tok_inst = MagicMock()
+            mock_tok_inst.return_value = {
+                "input_ids":      torch.zeros(1, 16, dtype=torch.long),
+                "attention_mask": torch.ones(1, 16, dtype=torch.long),
+            }
+            mock_t.from_pretrained.return_value = mock_tok_inst
+
+            clf = FirewallClassifier("dummy/model", num_labels=5)
+
+        return clf, mock_model_inst, mock_tok_inst
+
+    def test_predict_returns_one_dict_per_input(self) -> None:
+        clf, mock_m, mock_t = self._make_mock_classifier()
+        mock_m.return_value.logits = torch.zeros(2, 5)
+        mock_t.return_value = {
+            "input_ids":      torch.zeros(2, 16, dtype=torch.long),
+            "attention_mask": torch.ones(2, 16, dtype=torch.long),
+        }
+        results = clf.predict(["hello", "ignore"])
+        assert len(results) == 2
+
+    def test_predict_output_has_all_label_keys(self) -> None:
+        clf, _, _ = self._make_mock_classifier()
+        results = clf.predict(["hello"])
+        assert set(results[0].keys()) == {
+            "benign", "injection", "jailbreak", "exfiltration", "escalation"
+        }
+
+    def test_predict_probabilities_sum_to_one(self) -> None:
+        clf, _, _ = self._make_mock_classifier()
+        results = clf.predict(["hello"])
+        total = sum(results[0].values())
+        assert abs(total - 1.0) < 1e-5
+
+
+class TestComputeMetrics:
+    def test_all_keys_present(self) -> None:
+        import numpy as np
+
+        from firewall.classifier.train import compute_metrics
+
+        logits = np.array([[2.0, 0.1, 0.1, 0.1, 0.1], [0.1, 2.0, 0.1, 0.1, 0.1]])
+        labels = np.array([0, 1])
+        result = compute_metrics((logits, labels))
+        assert "accuracy" in result
+        assert "f1_macro" in result
+        assert "f1_weighted" in result
+
+    def test_perfect_predictions_give_f1_of_one(self) -> None:
+        import numpy as np
+        import pytest
+
+        from firewall.classifier.train import compute_metrics
+
+        logits = np.eye(5) * 10
+        labels = np.arange(5)
+        result = compute_metrics((logits, labels))
+        assert result["accuracy"] == pytest.approx(1.0)
+        assert result["f1_macro"] == pytest.approx(1.0)

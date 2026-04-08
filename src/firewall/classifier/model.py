@@ -1,21 +1,13 @@
-"""DeBERTa-v3-base classification model with custom head.
-
-Wraps a HuggingFace AutoModelForSequenceClassification with utilities for
-loading pre-trained weights, freezing backbone layers, and batch inference.
-"""
 from __future__ import annotations
 
 from pathlib import Path
 
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 class FirewallClassifier:
-    """Wraps a fine-tuned sequence-classification model for prompt threat detection.
-
-    Args:
-        model_name_or_path: HuggingFace model ID or local checkpoint directory.
-        num_labels: Number of threat categories (default 5).
-        device: Torch device string. Defaults to CUDA when available.
-    """
+    """Fine-tuned DeBERTa-v3-base sequence classifier for prompt threat detection."""
 
     def __init__(
         self,
@@ -23,35 +15,43 @@ class FirewallClassifier:
         num_labels: int = 5,
         device: str | None = None,
     ) -> None:
-        raise NotImplementedError
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = (
+            AutoModelForSequenceClassification.from_pretrained(
+                model_name_or_path, num_labels=num_labels
+            )
+            .to(self.device)
+            .eval()
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        self.id2label: dict[int, str] = self.model.config.id2label
 
     def predict(self, texts: list[str]) -> list[dict[str, float]]:
-        """Run batch inference and return per-class probability dicts.
-
-        Args:
-            texts: Raw prompt strings.
-
-        Returns:
-            List of dicts mapping label name → probability, one per input text.
-        """
-        raise NotImplementedError
+        """Return per-class probabilities for a batch of prompt strings."""
+        encoding = self.tokenizer(
+            texts,
+            truncation=True,
+            padding=True,
+            max_length=512,
+            return_tensors="pt",
+        )
+        encoding = {k: v.to(self.device) for k, v in encoding.items()}
+        with torch.no_grad():
+            logits = self.model(**encoding).logits
+        probs = torch.softmax(logits, dim=-1).cpu().tolist()
+        return [
+            {self.id2label[i]: float(p) for i, p in enumerate(prob)}
+            for prob in probs
+        ]
 
     def save(self, output_dir: str | Path) -> None:
-        """Persist model weights and tokenizer to *output_dir*.
-
-        Args:
-            output_dir: Destination directory (created if absent).
-        """
-        raise NotImplementedError
+        """Save model weights + tokenizer to output_dir."""
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        self.model.save_pretrained(out)
+        self.tokenizer.save_pretrained(out)
 
 
 def load_classifier(checkpoint_path: str | Path) -> FirewallClassifier:
-    """Load a fine-tuned :class:`FirewallClassifier` from a checkpoint directory.
-
-    Args:
-        checkpoint_path: Path to a directory containing ``config.json`` and weights.
-
-    Returns:
-        Loaded classifier placed in evaluation mode.
-    """
-    raise NotImplementedError
+    """Load a fine-tuned FirewallClassifier from a checkpoint directory."""
+    return FirewallClassifier(str(checkpoint_path))
