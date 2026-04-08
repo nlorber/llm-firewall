@@ -145,3 +145,54 @@ class TestComputeMetrics:
         result = compute_metrics((logits, labels))
         assert result["accuracy"] == pytest.approx(1.0)
         assert result["f1_macro"] == pytest.approx(1.0)
+
+
+class TestEvaluate:
+    def test_evaluate_returns_expected_keys(self, tmp_path) -> None:
+        from unittest.mock import patch
+
+        from firewall.classifier.evaluate import evaluate
+
+        mock_clf = MagicMock()
+        mock_clf.predict.return_value = [
+            {"benign": 0.8, "injection": 0.1, "jailbreak": 0.05,
+             "exfiltration": 0.03, "escalation": 0.02}
+        ]
+
+        test_jsonl = tmp_path / "test.jsonl"
+        test_jsonl.write_text('{"text": "hello", "label": "benign"}\n')
+
+        with patch("firewall.classifier.evaluate.load_classifier", return_value=mock_clf):
+            result = evaluate(
+                model_path="dummy/path",
+                test_path=test_jsonl,
+                label_names=["benign", "injection", "jailbreak", "exfiltration", "escalation"],
+            )
+
+        assert "accuracy" in result
+        assert "f1_macro" in result
+        assert "confusion_matrix" in result
+        assert "classification_report" in result
+
+    def test_perfect_prediction_gives_accuracy_one(self, tmp_path) -> None:
+        from unittest.mock import patch
+
+        from firewall.classifier.evaluate import evaluate
+
+        mock_clf = MagicMock()
+        mock_clf.predict.return_value = [
+            {"benign": 0.9, "injection": 0.05, "jailbreak": 0.02,
+             "exfiltration": 0.02, "escalation": 0.01}
+        ]
+
+        test_jsonl = tmp_path / "test.jsonl"
+        test_jsonl.write_text('{"text": "hello world", "label": "benign"}\n')
+
+        with patch("firewall.classifier.evaluate.load_classifier", return_value=mock_clf):
+            result = evaluate(
+                model_path="dummy/path",
+                test_path=test_jsonl,
+                label_names=["benign", "injection", "jailbreak", "exfiltration", "escalation"],
+            )
+
+        assert result["accuracy"] == 1.0
