@@ -1,24 +1,21 @@
-"""PyTorch Dataset and data-loading utilities for DeBERTa tokenisation.
-
-Handles tokenisation, padding/truncation, and label encoding for the
-multi-class prompt classification task.
-"""
+# src/firewall/classifier/dataset.py
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader, Dataset
+from transformers import AutoTokenizer
+
+LABEL_NAMES: list[str] = ["benign", "injection", "jailbreak", "exfiltration", "escalation"]
+LABEL2ID: dict[str, int] = {lbl: i for i, lbl in enumerate(LABEL_NAMES)}
 
 
 class FirewallDataset(Dataset):
-    """PyTorch Dataset that tokenises raw prompt strings for DeBERTa.
+    """Tokenises raw texts up-front and stores tensors in memory.
 
-    Args:
-        texts: List of raw prompt strings.
-        labels: Corresponding integer label indices (``None`` for inference-only use).
-        tokenizer_name: HuggingFace tokenizer identifier.
-        max_length: Maximum token sequence length (truncates longer inputs).
+    With ~5k examples and max_length=512, the encoded data fits comfortably in RAM.
     """
 
     def __init__(
@@ -28,13 +25,44 @@ class FirewallDataset(Dataset):
         tokenizer_name: str = "microsoft/deberta-v3-base",
         max_length: int = 512,
     ) -> None:
-        raise NotImplementedError
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        encoding = tokenizer(
+            texts,
+            truncation=True,
+            padding="max_length",
+            max_length=max_length,
+            return_tensors="pt",
+        )
+        self._input_ids = encoding["input_ids"]
+        self._attention_mask = encoding["attention_mask"]
+        self._token_type_ids = encoding.get("token_type_ids")
+        self._labels = (
+            torch.tensor(labels, dtype=torch.long) if labels is not None else None
+        )
 
     def __len__(self) -> int:
-        raise NotImplementedError
+        return self._input_ids.shape[0]
 
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
-        raise NotImplementedError
+        item: dict[str, torch.Tensor] = {
+            "input_ids": self._input_ids[idx],
+            "attention_mask": self._attention_mask[idx],
+        }
+        if self._token_type_ids is not None:
+            item["token_type_ids"] = self._token_type_ids[idx]
+        if self._labels is not None:
+            item["labels"] = self._labels[idx]
+        return item
+
+
+def _load_jsonl(path: Path) -> tuple[list[str], list[int]]:
+    texts, labels = [], []
+    with path.open() as f:
+        for line in f:
+            r = json.loads(line)
+            texts.append(r["text"])
+            labels.append(LABEL2ID[r["label"]])
+    return texts, labels
 
 
 def create_dataloaders(
@@ -45,17 +73,15 @@ def create_dataloaders(
     batch_size: int,
     max_length: int = 512,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
-    """Build train / val / test DataLoaders from processed JSONL files.
+    """Build DataLoaders from processed JSONL splits."""
 
-    Args:
-        train_path: Path to ``train.jsonl``.
-        val_path: Path to ``val.jsonl``.
-        test_path: Path to ``test.jsonl``.
-        tokenizer_name: HuggingFace tokenizer identifier.
-        batch_size: Mini-batch size.
-        max_length: Tokeniser truncation length.
+    def _make(path: Path, shuffle: bool) -> DataLoader:
+        texts, labels = _load_jsonl(path)
+        ds = FirewallDataset(texts, labels, tokenizer_name, max_length)
+        return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=0)
 
-    Returns:
-        Tuple of ``(train_loader, val_loader, test_loader)``.
-    """
-    raise NotImplementedError
+    return (
+        _make(train_path, shuffle=True),
+        _make(val_path, shuffle=False),
+        _make(test_path, shuffle=False),
+    )
