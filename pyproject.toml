@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-firewall"
+version = "0.1.0"
+description = "Agentic LLM firewall: fine-tuned DeBERTa classifier + LangGraph orchestration for prompt threat detection"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+keywords = ["llm", "security", "nlp", "classification", "langgraph"]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    # Deep learning + HuggingFace ecosystem
+    "torch>=2.0,<3",
+    "transformers>=4.40,<5",
+    "datasets>=2.18,<3",
+    "tokenizers>=0.19,<1",
+    # Classical ML + explainability
+    "scikit-learn>=1.4,<2",
+    "shap>=0.45,<1",
+    # Agentic orchestration
+    "langgraph>=0.2,<1",
+    "langchain-anthropic>=0.1,<1",
+    # LLM API (judge)
+    "anthropic>=0.28,<1",
+    # API serving
+    "fastapi>=0.111,<1",
+    "uvicorn[standard]>=0.29,<1",
+    # Config + validation
+    "pydantic>=2.7,<3",
+    "pydantic-settings>=2.3,<3",
+    "pyyaml>=6.0,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9",
+    "pytest-cov>=5.0,<6",
+    "ruff>=0.4,<1",
+    "mypy>=1.10,<2",
+    "pre-commit>=3.7,<4",
+    "jupyter>=1.0,<2",
+    "ipykernel>=6.29,<7",
+]
+
+[project.scripts]
+firewall-train    = "firewall.classifier.train:main"
+firewall-evaluate = "firewall.classifier.evaluate:main"
+firewall-serve    = "firewall.api.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts   = "--cov=firewall --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.mypy]
+python_version       = "3.11"
+strict               = false
+ignore_missing_imports = true
+files                = ["src/"]

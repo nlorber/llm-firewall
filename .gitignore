@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+*.env
+secrets/
+
+# Data and models (large binary artifacts)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+models/*
+!models/.gitkeep
+*.pt
+*.bin
+*.safetensors
+
+# Logs
+logs/
+
+# Notebooks
+notebooks/.ipynb_checkpoints/
+
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Weights & Biases
+wandb/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,32 @@
+# DeBERTa-v3-base fine-tuning configuration
+
+# Model
+model_name: "microsoft/deberta-v3-base"
+num_labels: 5
+label_names:
+  - benign
+  - injection
+  - jailbreak
+  - exfiltration
+  - escalation
+
+# Data paths (relative to repo root)
+train_path: "data/processed/train.jsonl"
+val_path:   "data/processed/val.jsonl"
+test_path:  "data/processed/test.jsonl"
+max_length: 512
+
+# Optimisation
+learning_rate:  2.0e-5
+batch_size:     16
+num_epochs:     10
+warmup_ratio:   0.1
+weight_decay:   0.01
+
+# Training behaviour
+early_stopping_patience: 3
+fp16: true  # set to false when training on CPU
+
+# Output
+output_dir: "models/classifier"
+seed: 42

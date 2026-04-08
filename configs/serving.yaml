@@ -1,0 +1,13 @@
+# FastAPI serving configuration
+
+# Server
+host: "0.0.0.0"
+port: 8000
+log_level: "info"
+
+# Model artefact (path to fine-tuned checkpoint directory)
+model_path: "models/classifier"
+
+# Inference
+max_length: 512
+batch_size: 1  # single-request latency target; increase for batch endpoints

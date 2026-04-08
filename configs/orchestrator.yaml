@@ -1,0 +1,19 @@
+# LangGraph routing threshold configuration
+#
+# "score" = max threat-class probability from the classifier (0–1).
+# Zone assignment:
+#   score < clean_threshold              → CLEAN → PASS immediately (no LLM call)
+#   clean_threshold ≤ score < block_threshold → GRAY  → route to LLM judge
+#   score ≥ block_threshold              → BLOCK → block immediately (no LLM call)
+#
+# TODO: calibrate both thresholds on the validation set after Phase 2.
+clean_threshold: 0.3
+block_threshold: 0.8
+
+# LLM judge (Claude API)
+judge_model:      "claude-sonnet-4-20250514"
+judge_max_tokens: 512
+retry_count:      2
+
+# Logging
+log_dir: "logs/"
