@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import pytest
-from data.prepare import deduplicate, harmonise_labels, stratified_split, LABEL_NAMES
+
+from data.prepare import LABEL_NAMES, deduplicate, harmonise_labels, stratified_split
 
 
 class TestHarmoniseLabels:
@@ -44,6 +45,7 @@ class TestDeduplicate:
         ]
         result = deduplicate(records)
         assert len(result) == 1
+        assert result[0]["text"] == "HELLO"  # first occurrence preserved
 
     def test_preserves_first_occurrence(self) -> None:
         records = [
@@ -56,22 +58,23 @@ class TestDeduplicate:
 
 class TestStratifiedSplit:
     def test_split_ratios_are_approximately_correct(self) -> None:
-        records = [{"text": f"t{i}", "label": l}
-                   for i in range(20) for l in ["benign", "injection"]]
-        train, val, test = stratified_split(records, val_ratio=0.15, test_ratio=0.15)
-        total = len(train) + len(val) + len(test)
+        records = [{"text": f"t{i}", "label": lbl}
+                   for i in range(20) for lbl in ["benign", "injection"]]
+        train, val, test_split = stratified_split(records, val_ratio=0.15, test_ratio=0.15)
+        total = len(train) + len(val) + len(test_split)
         assert total == len(records)
         assert abs(len(val) / total - 0.15) < 0.05
 
     def test_all_classes_present_in_train(self) -> None:
-        records = [{"text": f"t{i}", "label": l}
-                   for i in range(10) for l in ["benign", "injection", "jailbreak"]]
+        records = [{"text": f"t{i}", "label": lbl}
+                   for i in range(10) for lbl in ["benign", "injection", "jailbreak"]]
         train, _, _ = stratified_split(records)
         labels_in_train = {r["label"] for r in train}
         assert labels_in_train == {"benign", "injection", "jailbreak"}
 
     def test_seed_produces_deterministic_splits(self) -> None:
-        records = [{"text": f"t{i}", "label": "benign"} for i in range(100)]
+        records = [{"text": f"t{i}", "label": lbl}
+                   for i in range(50) for lbl in ["benign", "injection"]]
         split_a = stratified_split(records, seed=42)
         split_b = stratified_split(records, seed=42)
         assert [r["text"] for r in split_a[0]] == [r["text"] for r in split_b[0]]
