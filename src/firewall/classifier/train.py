@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -21,7 +22,7 @@ from transformers import (
 from firewall.classifier.dataset import LABEL2ID, FirewallDataset
 
 
-def compute_metrics(eval_pred: tuple) -> dict[str, float]:
+def compute_metrics(eval_pred: tuple[np.ndarray, np.ndarray]) -> dict[str, float]:
     """Compute accuracy + macro/weighted F1 for the HF Trainer callback."""
     logits, labels = eval_pred
     preds = np.argmax(logits, axis=-1)
@@ -44,7 +45,7 @@ def _load_jsonl(path: Path) -> tuple[list[str], list[int]]:
 
 def train(config_path: str | Path) -> None:
     """Fine-tune DeBERTa from configs/training.yaml."""
-    config = yaml.safe_load(Path(config_path).read_text())
+    config: dict[str, Any] = yaml.safe_load(Path(config_path).read_text())
 
     label_names: list[str] = config["label_names"]
     id2label = {i: lbl for i, lbl in enumerate(label_names)}
@@ -90,7 +91,13 @@ def train(config_path: str | Path) -> None:
     class WeightedTrainer(Trainer):
         """Trainer subclass that applies class weights to the cross-entropy loss."""
 
-        def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+        def compute_loss(  # type: ignore[override]  # HF Trainer signature uses Any broadly; our override is safe
+            self,
+            model: Any,
+            inputs: dict[str, Any],
+            return_outputs: bool = False,
+            **kwargs: Any,
+        ) -> Any:
             labels = inputs.pop("labels")
             outputs = model(**inputs)
             logits = outputs.logits
@@ -110,7 +117,7 @@ def train(config_path: str | Path) -> None:
 
     trainer.train()
     trainer.save_model(config["output_dir"])
-    AutoTokenizer.from_pretrained(tokenizer_name).save_pretrained(config["output_dir"])
+    AutoTokenizer.from_pretrained(tokenizer_name).save_pretrained(config["output_dir"])  # type: ignore[no-untyped-call]
     print(f"[train] model saved to {config['output_dir']}")
 
 

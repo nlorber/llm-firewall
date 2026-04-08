@@ -47,6 +47,7 @@ dev = [
     "pytest-cov>=5.0,<6",
     "ruff>=0.4,<1",
     "mypy>=1.10,<2",
+    "types-PyYAML>=6.0,<7",
     "pre-commit>=3.7,<4",
     "jupyter>=1.0,<2",
     "ipykernel>=6.29,<7",
@@ -68,10 +69,24 @@ addopts   = "--cov=firewall --cov-report=term-missing"
 source = ["src"]
 
 [tool.mypy]
-python_version       = "3.11"
-strict               = false
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "torch.*",
+    "transformers.*",
+    "datasets.*",
+    "shap",
+    "langgraph.*",
+    "sklearn.*",
+    "accelerate.*",
+    "sentencepiece",
+    "anthropic.*",
+]
 ignore_missing_imports = true
-files                = ["src/"]
 
 [tool.ruff]
 line-length = 99

@@ -1,7 +1,7 @@
 # src/firewall/orchestrator/graph.py
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from firewall.classifier.model import FirewallClassifier
@@ -13,7 +13,7 @@ def build_graph(
     judge: LLMJudge,
     clean_threshold: float = 0.3,
     block_threshold: float = 0.8,
-) -> object:
+) -> Any:  # langgraph compiled graph has no public type; Any is appropriate here
     """Assemble and compile the firewall LangGraph StateGraph.
 
     Call this once at API startup with the loaded classifier and judge.

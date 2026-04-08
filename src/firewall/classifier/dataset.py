@@ -12,7 +12,7 @@ LABEL_NAMES: list[str] = ["benign", "injection", "jailbreak", "exfiltration", "e
 LABEL2ID: dict[str, int] = {lbl: i for i, lbl in enumerate(LABEL_NAMES)}
 
 
-class FirewallDataset(Dataset):
+class FirewallDataset(Dataset[dict[str, torch.Tensor]]):
     """Tokenises raw texts up-front and stores tensors in memory.
 
     With ~5k examples and max_length=512, the encoded data fits comfortably in RAM.
@@ -25,7 +25,7 @@ class FirewallDataset(Dataset):
         tokenizer_name: str = "microsoft/deberta-v3-base",
         max_length: int = 512,
     ) -> None:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)  # type: ignore[no-untyped-call]
         encoding = tokenizer(
             texts,
             truncation=True,
@@ -41,7 +41,7 @@ class FirewallDataset(Dataset):
         )
 
     def __len__(self) -> int:
-        return self._input_ids.shape[0]
+        return int(self._input_ids.shape[0])
 
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         item: dict[str, torch.Tensor] = {
@@ -72,10 +72,10 @@ def create_dataloaders(
     tokenizer_name: str,
     batch_size: int,
     max_length: int = 512,
-) -> tuple[DataLoader, DataLoader, DataLoader]:
+) -> tuple[DataLoader[dict[str, torch.Tensor]], DataLoader[dict[str, torch.Tensor]], DataLoader[dict[str, torch.Tensor]]]:
     """Build DataLoaders from processed JSONL splits."""
 
-    def _make(path: Path, shuffle: bool) -> DataLoader:
+    def _make(path: Path, shuffle: bool) -> DataLoader[dict[str, torch.Tensor]]:
         texts, labels = _load_jsonl(path)
         ds = FirewallDataset(texts, labels, tokenizer_name, max_length)
         return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=0)

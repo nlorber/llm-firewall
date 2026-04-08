@@ -64,7 +64,8 @@ class LLMJudge:
                 messages=[{"role": "user", "content": user_message}],
             )
             try:
-                raw = response.content[0].text.strip()
+                block = response.content[0]
+                raw = block.text.strip()  # type: ignore[union-attr]  # we only send text prompts; first block is always TextBlock
                 data = json.loads(raw)
                 return JudgeVerdict(
                     decision=data["decision"],

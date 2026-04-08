@@ -1,6 +1,8 @@
 # src/firewall/classifier/explain.py
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import shap
 
@@ -8,10 +10,10 @@ import shap
 class SHAPExplainer:
     """Token-level SHAP attributions for the firewall classifier."""
 
-    def __init__(self, model: object, max_evals: int = 500) -> None:
+    def __init__(self, model: Any, max_evals: int = 500) -> None:
         self._model = model
 
-        def _predict_proba(texts: list[str]) -> np.ndarray:
+        def _predict_proba(texts: list[str]) -> np.ndarray[Any, np.dtype[Any]]:
             results = model.predict(list(texts))
             return np.array([[v for v in r.values()] for r in results])
 
@@ -21,7 +23,7 @@ class SHAPExplainer:
             max_evals=max_evals,
         )
 
-    def explain(self, texts: list[str]) -> list[dict]:
+    def explain(self, texts: list[str]) -> list[dict[str, Any]]:
         """Return SHAP values and tokens for each text.
 
         Returns:
@@ -40,12 +42,12 @@ class SHAPExplainer:
 
 def plot_attention_heatmap(
     text: str,
-    model: object,
+    model: Any,
     layer: int = -1,
     head: int = 0,
 ) -> None:
     """Render a matplotlib attention heatmap for a single input."""
-    import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt  # type: ignore[import-not-found]  # matplotlib stubs not installed
     import torch
 
     tokenizer = model.tokenizer

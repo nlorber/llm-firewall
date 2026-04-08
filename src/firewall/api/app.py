@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -38,7 +39,7 @@ def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):  # type: ignore[type-arg]
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         config = _load_config()
         classifier = load_classifier(config["model_path"])
         judge = LLMJudge(
@@ -64,7 +65,7 @@ def create_app() -> FastAPI:
 
     @app.post("/analyze", response_model=AnalysisResponse)
     async def analyze(request: AnalysisRequest) -> AnalysisResponse:
-        initial_state = {
+        initial_state: dict[str, Any] = {
             "prompt":         request.prompt,
             "classification": None,
             "zone":           None,

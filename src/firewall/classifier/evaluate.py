@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
 import yaml
 from sklearn.metrics import (
@@ -20,7 +21,7 @@ def evaluate(
     model_path: str | Path,
     test_path: str | Path,
     label_names: list[str],
-) -> dict:
+) -> dict[str, Any]:
     """Run inference on the test split and return full evaluation metrics."""
     clf = load_classifier(model_path)
 

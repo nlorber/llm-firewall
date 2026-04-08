@@ -10,6 +10,6 @@ repos:
     rev: v1.10.0
     hooks:
       - id: mypy
-        args: [--ignore-missing-imports]
+        args: [--strict]
         additional_dependencies:
           - "pydantic>=2.7"

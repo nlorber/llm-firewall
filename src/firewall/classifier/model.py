@@ -23,8 +23,8 @@ class FirewallClassifier:
             .to(self.device)
             .eval()
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-        self.id2label: dict[int, str] = self.model.config.id2label
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)  # type: ignore[no-untyped-call]
+        self.id2label: dict[int, str] = dict(self.model.config.id2label)
 
     def predict(self, texts: list[str]) -> list[dict[str, float]]:
         """Return per-class probabilities for a batch of prompt strings."""

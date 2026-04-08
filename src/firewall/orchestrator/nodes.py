@@ -31,7 +31,7 @@ def init_nodes(
     _block_threshold = block_threshold
 
 
-def classify_node(state: FirewallState) -> dict:
+def classify_node(state: FirewallState) -> dict[str, Any]:
     """Run classifier and assign zone."""
     assert _classifier is not None, "call init_nodes() before using the graph"
     results = _classifier.predict([state["prompt"]])
@@ -59,10 +59,11 @@ def classify_node(state: FirewallState) -> dict:
     }
 
 
-def judge_node(state: FirewallState) -> dict:
+def judge_node(state: FirewallState) -> dict[str, Any]:
     """Invoke LLM judge for GRAY zone prompts."""
     assert _judge is not None, "call init_nodes() before using the graph"
     clf = state["classification"]
+    assert clf is not None, "classify_node must run before judge_node"
     verdict = _judge.judge(
         prompt=state["prompt"],
         classification_label=clf["label"],
@@ -77,18 +78,18 @@ def judge_node(state: FirewallState) -> dict:
     }
 
 
-def execute_node(state: FirewallState) -> dict:
+def execute_node(state: FirewallState) -> dict[str, Any]:
     """Finalise a PASS decision."""
-    clf = state.get("classification") or {}
+    clf: dict[str, Any] = dict(state.get("classification") or {})
     label = clf.get("label", "unknown")
     score = clf.get("top_score", 0.0)
     explanation = f"Prompt classified as '{label}' (score {score:.2f}) — below block threshold. PASS."
     return {"final_decision": "PASS", "explanation": explanation}
 
 
-def log_node(state: FirewallState) -> dict:
+def log_node(state: FirewallState) -> dict[str, Any]:
     """Append a structured block event and finalise a BLOCK decision."""
-    clf = state.get("classification") or {}
+    clf: dict[str, Any] = dict(state.get("classification") or {})
     judge_result = state.get("judge_result")
 
     if judge_result:
@@ -110,7 +111,7 @@ def log_node(state: FirewallState) -> dict:
         "explanation":  explanation,
     }
 
-    existing_logs: list = list(state.get("logs") or [])
+    existing_logs: list[dict[str, Any]] = list(state.get("logs") or [])
     return {
         "final_decision": "BLOCK",
         "explanation":    explanation,
@@ -130,5 +131,7 @@ def route_after_classify(state: FirewallState) -> str:
 
 def route_after_judge(state: FirewallState) -> str:
     """Map judge decision to next node."""
-    decision = state["judge_result"]["decision"]
+    judge_result = state["judge_result"]
+    assert judge_result is not None, "judge_node must run before route_after_judge"
+    decision = judge_result["decision"]
     return "execute_node" if decision == "PASS" else "log_node"
