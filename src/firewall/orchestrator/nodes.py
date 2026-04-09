@@ -8,7 +8,9 @@ if TYPE_CHECKING:
     from firewall.classifier.model import FirewallClassifier
     from firewall.judge.judge import LLMJudge
 
-from firewall.orchestrator.state import FirewallState
+from firewall.orchestrator.state import (
+    FirewallState,  # noqa: TCH001 — LangGraph introspects annotations
+)
 
 # Module-level state — populated by init_nodes() before building the graph
 _classifier: FirewallClassifier | None = None
