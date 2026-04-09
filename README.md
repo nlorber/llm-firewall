@@ -68,15 +68,15 @@ flowchart LR
 
 ![Training curves](reports/training_curves.png)
 
-### Class Distribution
+### Confusion Matrix
 
-![Class distribution](reports/class_distribution.png)
+![Confusion matrix](reports/confusion_matrix.png)
 
 ### Explainability
 
-SHAP token-level attributions highlight which tokens drove the classifier's decision for each threat class. See `notebooks/03_explainability.ipynb` for interactive examples.
+SHAP token-level attributions highlight which tokens drove the classifier's decision. Red tokens push toward the predicted class; blue tokens push away. See `notebooks/03_explainability.ipynb` for all five threat classes.
 
-![SHAP example](reports/shap_example.png)
+![SHAP token attribution](reports/shap_example.png)
 
 ## Design Decisions
 

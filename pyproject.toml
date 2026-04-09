@@ -39,6 +39,7 @@ dependencies = [
     "protobuf>=5.0,<8",
     "sentencepiece>=0.2,<1",
     "accelerate>=0.26,<2",
+    "seaborn>=0.13.2",
 ]
 
 [project.optional-dependencies]
