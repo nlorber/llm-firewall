@@ -93,7 +93,7 @@ line-length = 99
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "N", "UP", "B", "A", "SIM", "TCH", "G"]
 ignore = [
     "E501",  # line-too-long — handled by the formatter
 ]
