@@ -67,11 +67,13 @@ score ≥ 0.8  →  BLOCK  →  block immediately
 
 ### Threshold selection
 
-The thresholds (0.3 / 0.8) were chosen by examining the classifier's score distribution on the validation set:
+The thresholds (0.3 / 0.8) were chosen as conservative defaults informed by typical score distributions in similar binary/multiclass threat classifiers:
 
-- Below 0.3: the classifier is confident the prompt is benign. False negative rate < 1% in this region.
-- Above 0.8: the classifier is confident the prompt is malicious. False positive rate < 0.5% in this region.
-- Between 0.3 and 0.8: the classifier is uncertain. This is exactly where the LLM judge adds value.
+- Below 0.3: the model's threat-class probability is low enough to pass without review.
+- Above 0.8: the model's threat-class probability is high enough to block without review.
+- Between 0.3 and 0.8: the classifier is uncertain — this is exactly where the LLM judge adds value.
+
+These defaults should be calibrated per-deployment by examining the classifier's PR curve on a held-out validation set.
 
 Both thresholds are configurable in `configs/orchestrator.yaml` and can be tuned per-deployment depending on the cost of false positives vs. false negatives.
 

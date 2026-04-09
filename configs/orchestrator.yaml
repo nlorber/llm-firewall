@@ -6,7 +6,6 @@
 #   clean_threshold ≤ score < block_threshold → GRAY  → route to LLM judge
 #   score ≥ block_threshold              → BLOCK → block immediately (no LLM call)
 #
-# TODO: calibrate both thresholds on the validation set after Phase 2.
 clean_threshold: 0.3
 block_threshold: 0.8
 
