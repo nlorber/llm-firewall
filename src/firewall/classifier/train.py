@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,8 @@ from transformers import (
 )
 
 from firewall.classifier.dataset import FirewallDataset, _load_jsonl
+
+logger = logging.getLogger(__name__)
 
 
 def compute_metrics(eval_pred: tuple[np.ndarray, np.ndarray]) -> dict[str, float]:
@@ -107,7 +110,7 @@ def train(config_path: str | Path) -> None:
     trainer.train()
     trainer.save_model(config["output_dir"])
     AutoTokenizer.from_pretrained(tokenizer_name).save_pretrained(config["output_dir"])  # type: ignore[no-untyped-call]
-    print(f"[train] model saved to {config['output_dir']}")
+    logger.info("model saved to %s", config["output_dir"])
 
 
 def main() -> None:

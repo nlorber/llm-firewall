@@ -1,10 +1,14 @@
 # src/firewall/classifier/explain.py
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import shap
+
+if TYPE_CHECKING:
+    from firewall.classifier.model import FirewallClassifier
 
 
 class SHAPExplainer:
@@ -42,11 +46,16 @@ class SHAPExplainer:
 
 def plot_attention_heatmap(
     text: str,
-    model: Any,
+    model: FirewallClassifier,
     layer: int = -1,
     head: int = 0,
-) -> None:
-    """Render a matplotlib attention heatmap for a single input."""
+    output_path: str | Path = "attention_heatmap.png",
+) -> Path:
+    """Render a matplotlib attention heatmap for a single input.
+
+    Returns:
+        Path to the saved figure.
+    """
     import matplotlib.pyplot as plt
     import torch
 
@@ -69,4 +78,7 @@ def plot_attention_heatmap(
     ax.set_title(f"Attention layer {layer} head {head}")
     plt.colorbar(im, ax=ax)
     plt.tight_layout()
-    plt.show()
+    out = Path(output_path)
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out

@@ -16,11 +16,14 @@ from sklearn.metrics import (
 from firewall.classifier.dataset import LABEL2ID
 from firewall.classifier.model import load_classifier
 
+_DEFAULT_EVAL_BATCH_SIZE = 32
+
 
 def evaluate(
     model_path: str | Path,
     test_path: str | Path,
     label_names: list[str],
+    batch_size: int = _DEFAULT_EVAL_BATCH_SIZE,
 ) -> dict[str, Any]:
     """Run inference on the test split and return full evaluation metrics."""
     clf = load_classifier(model_path)
@@ -31,9 +34,6 @@ def evaluate(
             r = json.loads(line)
             texts.append(r["text"])
             y_true.append(LABEL2ID[r["label"]])
-
-    # Batch inference to avoid OOM on large test sets
-    batch_size = 32
     all_pred_labels: list[str] = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
