@@ -25,7 +25,6 @@ dependencies = [
     "shap>=0.45,<1",
     # Agentic orchestration
     "langgraph>=0.2,<1",
-    "langchain-anthropic>=0.1,<1",
     # LLM API (judge)
     "anthropic>=0.28,<1",
     # API serving
@@ -33,13 +32,11 @@ dependencies = [
     "uvicorn[standard]>=0.29,<1",
     # Config + validation
     "pydantic>=2.7,<3",
-    "pydantic-settings>=2.3,<3",
     "pyyaml>=6.0,<7",
     # Tokenizer + training runtime
     "protobuf>=5.0,<8",
     "sentencepiece>=0.2,<1",
     "accelerate>=0.26,<2",
-    "seaborn>=0.13.2",
 ]
 
 [project.optional-dependencies]
