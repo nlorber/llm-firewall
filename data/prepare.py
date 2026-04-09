@@ -8,6 +8,8 @@ from pathlib import Path
 import anthropic
 from sklearn.model_selection import StratifiedShuffleSplit
 
+# Canonical source: firewall.classifier.dataset.LABEL_NAMES (duplicated here
+# because data/ scripts are standalone and don't depend on the firewall package).
 LABEL_NAMES: list[str] = ["benign", "injection", "jailbreak", "exfiltration", "escalation"]
 
 # Maps raw label values (as strings) from each source to canonical LABEL_NAMES

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +18,7 @@ from transformers import (
     TrainingArguments,
 )
 
-from firewall.classifier.dataset import LABEL2ID, FirewallDataset
+from firewall.classifier.dataset import FirewallDataset, _load_jsonl
 
 
 def compute_metrics(eval_pred: tuple[np.ndarray, np.ndarray]) -> dict[str, float]:
@@ -31,16 +30,6 @@ def compute_metrics(eval_pred: tuple[np.ndarray, np.ndarray]) -> dict[str, float
         "f1_macro":    float(f1_score(labels, preds, average="macro", zero_division=0)),
         "f1_weighted": float(f1_score(labels, preds, average="weighted", zero_division=0)),
     }
-
-
-def _load_jsonl(path: Path) -> tuple[list[str], list[int]]:
-    texts, labels = [], []
-    with path.open() as f:
-        for line in f:
-            r = json.loads(line)
-            texts.append(r["text"])
-            labels.append(LABEL2ID[r["label"]])
-    return texts, labels
 
 
 def train(config_path: str | Path) -> None:
