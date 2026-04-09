@@ -223,6 +223,33 @@ class TestEvaluate:
         assert result["accuracy"] == 1.0
 
 
+class TestEvaluateMain:
+    def test_main_parses_config_and_prints_results(self, tmp_path) -> None:
+        import yaml
+
+        from firewall.classifier.evaluate import main
+
+        config = {
+            "output_dir": "dummy/model",
+            "test_path": str(tmp_path / "test.jsonl"),
+            "label_names": ["benign", "injection", "jailbreak", "exfiltration", "escalation"],
+        }
+        config_path = tmp_path / "eval_config.yaml"
+        config_path.write_text(yaml.dump(config))
+
+        mock_results = {
+            "accuracy": 0.95,
+            "f1_macro": 0.94,
+            "f1_weighted": 0.95,
+            "confusion_matrix": [[1]],
+            "classification_report": "dummy report",
+        }
+
+        with patch("firewall.classifier.evaluate.evaluate", return_value=mock_results), \
+             patch("sys.argv", ["evaluate", "--config", str(config_path)]):
+            main()
+
+
 class TestSHAPExplainer:
     def test_explain_returns_list_with_expected_keys(self) -> None:
         from firewall.classifier.explain import SHAPExplainer
