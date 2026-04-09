@@ -43,9 +43,13 @@ def classify_node(state: FirewallState) -> dict[str, Any]:
     label_names = list(scores.keys())
     label2id = {lbl: i for i, lbl in enumerate(label_names)}
 
-    if top_score >= _block_threshold:
+    # Route on max threat-class score, not overall top score.
+    # A confident benign prediction (e.g. benign=0.35) should not trigger the GRAY zone.
+    threat_score = max((v for k, v in scores.items() if k != "benign"), default=0.0)
+
+    if threat_score >= _block_threshold:
         zone = "BLOCK"
-    elif top_score >= _clean_threshold:
+    elif threat_score >= _clean_threshold:
         zone = "GRAY"
     else:
         zone = "CLEAN"
