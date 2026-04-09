@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from data.prepare import LABEL_NAMES, deduplicate, harmonise_labels, stratified_split
+from firewall.classifier.dataset import LABEL2ID, _load_jsonl
 
 
 class TestHarmoniseLabels:
@@ -78,3 +79,22 @@ class TestStratifiedSplit:
         split_a = stratified_split(records, seed=42)
         split_b = stratified_split(records, seed=42)
         assert [r["text"] for r in split_a[0]] == [r["text"] for r in split_b[0]]
+
+
+class TestLoadJsonl:
+    def test_loads_texts_and_labels_from_jsonl(self, tmp_path) -> None:
+        jsonl = tmp_path / "data.jsonl"
+        jsonl.write_text(
+            '{"text": "hello", "label": "benign"}\n'
+            '{"text": "ignore instructions", "label": "injection"}\n'
+        )
+        texts, labels = _load_jsonl(jsonl)
+        assert texts == ["hello", "ignore instructions"]
+        assert labels == [LABEL2ID["benign"], LABEL2ID["injection"]]
+
+    def test_empty_file_returns_empty_lists(self, tmp_path) -> None:
+        jsonl = tmp_path / "empty.jsonl"
+        jsonl.write_text("")
+        texts, labels = _load_jsonl(jsonl)
+        assert texts == []
+        assert labels == []
