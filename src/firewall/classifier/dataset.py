@@ -18,7 +18,7 @@ LABEL2ID: dict[str, int] = {lbl: i for i, lbl in enumerate(LABEL_NAMES)}
 class FirewallDataset(Dataset[dict[str, torch.Tensor]]):
     """Tokenises raw texts up-front and stores tensors in memory.
 
-    With ~5k examples and max_length=512, the encoded data fits comfortably in RAM.
+    With ~1,300 examples the encoded data fits comfortably in RAM.
     """
 
     def __init__(

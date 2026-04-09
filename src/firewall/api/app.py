@@ -30,6 +30,7 @@ def _load_config() -> dict[str, Any]:
     orch    = yaml.safe_load(Path("configs/orchestrator.yaml").read_text())
     return {
         "model_path":       os.environ.get("MODEL_PATH", serving["model_path"]),
+        "max_length":       serving["max_length"],
         "clean_threshold":  orch["clean_threshold"],
         "block_threshold":  orch["block_threshold"],
         "judge_model":      orch["judge_model"],
@@ -44,7 +45,7 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         config = _load_config()
-        classifier = load_classifier(config["model_path"])
+        classifier = load_classifier(config["model_path"], max_length=config["max_length"])
         judge = LLMJudge(
             model=config["judge_model"],
             max_tokens=config["judge_max_tokens"],

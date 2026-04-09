@@ -14,8 +14,10 @@ class FirewallClassifier:
         model_name_or_path: str,
         num_labels: int = 5,
         device: str | None = None,
+        max_length: int = 512,
     ) -> None:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.max_length = max_length
         self.model = (
             AutoModelForSequenceClassification.from_pretrained(
                 model_name_or_path, num_labels=num_labels
@@ -32,7 +34,7 @@ class FirewallClassifier:
             texts,
             truncation=True,
             padding=True,
-            max_length=512,
+            max_length=self.max_length,
             return_tensors="pt",
         )
         encoding = {k: v.to(self.device) for k, v in encoding.items()}
@@ -52,6 +54,9 @@ class FirewallClassifier:
         self.tokenizer.save_pretrained(out)
 
 
-def load_classifier(checkpoint_path: str | Path) -> FirewallClassifier:
+def load_classifier(
+    checkpoint_path: str | Path,
+    max_length: int = 512,
+) -> FirewallClassifier:
     """Load a fine-tuned FirewallClassifier from a checkpoint directory."""
-    return FirewallClassifier(str(checkpoint_path))
+    return FirewallClassifier(str(checkpoint_path), max_length=max_length)
