@@ -1,10 +1,9 @@
 # tests/test_data.py
 from __future__ import annotations
 
-import pytest
-
 from unittest.mock import MagicMock, patch
 
+import pytest
 import torch
 
 from data.prepare import LABEL_NAMES, deduplicate, harmonise_labels, stratified_split
