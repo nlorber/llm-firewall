@@ -137,6 +137,14 @@ class TestFirewallClassifier:
         total = sum(results[0].values())
         assert abs(total - 1.0) < 1e-5
 
+    def test_save_creates_directory_and_persists(self, tmp_path) -> None:
+        clf, mock_model, mock_tok = self._make_mock_classifier()
+        save_dir = tmp_path / "saved_model"
+        clf.save(save_dir)
+        assert save_dir.exists()
+        mock_model.save_pretrained.assert_called_once_with(save_dir)
+        mock_tok.save_pretrained.assert_called_once_with(save_dir)
+
 
 class TestComputeMetrics:
     def test_all_keys_present(self) -> None:
