@@ -1,6 +1,7 @@
 # src/firewall/api/app.py
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -76,7 +77,7 @@ def create_app() -> FastAPI:
             "explanation":    None,
             "logs":           [],
         }
-        result = app.state.graph.invoke(initial_state)
+        result = await asyncio.to_thread(app.state.graph.invoke, initial_state)
         clf = result["classification"]
         scores = [
             ClassificationScore(label=k, score=v)
