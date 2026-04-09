@@ -105,6 +105,46 @@ class TestExecuteNode:
         assert len(update["explanation"]) > 0
 
 
+class TestJudgeNode:
+    def test_judge_node_returns_verdict(self) -> None:
+        mock_judge = MagicMock()
+        mock_judge.judge.return_value = JudgeVerdict(
+            decision="BLOCK", reasoning="looks suspicious", confidence=0.85,
+        )
+        nodes_mod.init_nodes(
+            classifier=_mock_classifier("benign", 0.1),
+            judge=mock_judge, clean_threshold=0.3, block_threshold=0.8,
+        )
+        state = {
+            **_make_state("suspicious prompt"),
+            "classification": {"label": "jailbreak", "scores": {"jailbreak": 0.55}},
+        }
+        update = nodes_mod.judge_node(state)
+        assert update["judge_result"]["decision"] == "BLOCK"
+        assert update["judge_result"]["reasoning"] == "looks suspicious"
+        assert update["judge_result"]["confidence"] == 0.85
+        mock_judge.judge.assert_called_once()
+
+    def test_judge_node_passes_classification_to_judge(self) -> None:
+        mock_judge = MagicMock()
+        mock_judge.judge.return_value = JudgeVerdict(
+            decision="PASS", reasoning="ok", confidence=0.9,
+        )
+        nodes_mod.init_nodes(
+            classifier=_mock_classifier("benign", 0.1),
+            judge=mock_judge, clean_threshold=0.3, block_threshold=0.8,
+        )
+        scores = {"injection": 0.4, "benign": 0.1}
+        state = {
+            **_make_state("test"),
+            "classification": {"label": "injection", "scores": scores},
+        }
+        nodes_mod.judge_node(state)
+        mock_judge.judge.assert_called_once_with(
+            prompt="test", classification_label="injection", scores=scores,
+        )
+
+
 class TestLogNode:
     def test_log_node_sets_block_decision(self) -> None:
         state = _make_state("malicious prompt")
@@ -117,6 +157,20 @@ class TestLogNode:
         assert len(update["logs"]) == 1
         assert "prompt" in update["logs"][0]
         assert "timestamp" in update["logs"][0]
+
+    def test_log_node_with_judge_result_uses_judge_reasoning(self) -> None:
+        state = {
+            **_make_state("ambiguous prompt"),
+            "classification": {"label": "jailbreak", "label_id": 2,
+                               "scores": {"jailbreak": 0.55}, "top_score": 0.55},
+            "zone": "GRAY",
+            "judge_result": {"decision": "BLOCK", "reasoning": "confirmed threat",
+                             "confidence": 0.9},
+        }
+        update = nodes_mod.log_node(state)
+        assert update["final_decision"] == "BLOCK"
+        assert "confirmed threat" in update["explanation"]
+        assert "LLM judge" in update["explanation"]
 
 
 class TestGraphIntegration:

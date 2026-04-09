@@ -5,6 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
+from firewall.api.schemas import AnalysisRequest, ClassificationScore
 
 
 def _graph_result(decision: str, zone: str, label: str, score: float, judge: bool) -> dict:
@@ -81,3 +84,33 @@ class TestHealthEndpoint:
         test_client, _ = client
         response = test_client.get("/health")
         assert response.json()["status"] == "ok"
+
+
+class TestSchemaValidation:
+    def test_prompt_min_length_rejects_empty(self) -> None:
+        with pytest.raises(ValidationError, match="string_too_short"):
+            AnalysisRequest(prompt="")
+
+    def test_prompt_max_length_rejects_oversized(self) -> None:
+        with pytest.raises(ValidationError, match="string_too_long"):
+            AnalysisRequest(prompt="x" * 8193)
+
+    def test_context_max_length_rejects_oversized(self) -> None:
+        with pytest.raises(ValidationError, match="string_too_long"):
+            AnalysisRequest(prompt="valid", context="x" * 8193)
+
+    def test_context_none_is_valid(self) -> None:
+        req = AnalysisRequest(prompt="hello")
+        assert req.context is None
+
+    def test_score_ge_rejects_negative(self) -> None:
+        with pytest.raises(ValidationError, match="greater than or equal"):
+            ClassificationScore(label="benign", score=-0.1)
+
+    def test_score_le_rejects_above_one(self) -> None:
+        with pytest.raises(ValidationError, match="less than or equal"):
+            ClassificationScore(label="benign", score=1.1)
+
+    def test_valid_score_accepted(self) -> None:
+        s = ClassificationScore(label="injection", score=0.85)
+        assert s.score == 0.85
