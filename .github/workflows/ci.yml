@@ -37,7 +37,7 @@ jobs:
         run: make typecheck
 
       - name: Test with coverage
-        run: uv run pytest --cov=firewall --cov-report=json --tb=short
+        run: uv run pytest --cov=firewall --cov-report=json --cov-fail-under=80 --tb=short
 
       - name: Extract coverage
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
