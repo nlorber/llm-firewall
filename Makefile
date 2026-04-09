@@ -40,8 +40,6 @@ docker-build:
 ## Remove build artifacts, caches, and compiled files
 clean:
 	rm -rf dist/ build/ .eggs/ *.egg-info/ .venv/
+	rm -rf .mypy_cache .ruff_cache .pytest_cache .coverage coverage.json htmlcov
 	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type d -name .pytest_cache -exec rm -rf {} +
-	find . -type d -name .mypy_cache  -exec rm -rf {} +
-	find . -type d -name .ruff_cache  -exec rm -rf {} +
 	find . -name "*.pyc" -delete
