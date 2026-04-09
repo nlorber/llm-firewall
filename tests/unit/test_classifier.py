@@ -65,6 +65,23 @@ class TestFirewallDataset:
 
         assert "labels" not in ds[0]
 
+    def test_item_includes_token_type_ids_when_present(self) -> None:
+        from firewall.classifier.dataset import FirewallDataset
+
+        texts = ["hello"]
+        labels = [0]
+        with patch("firewall.classifier.dataset.AutoTokenizer") as mock_tok_cls:
+            mock_tok = MagicMock()
+            mock_tok.return_value = {
+                "input_ids": torch.zeros(1, 16, dtype=torch.long),
+                "attention_mask": torch.ones(1, 16, dtype=torch.long),
+                "token_type_ids": torch.zeros(1, 16, dtype=torch.long),
+            }
+            mock_tok_cls.from_pretrained.return_value = mock_tok
+            ds = FirewallDataset(texts, labels, tokenizer_name="dummy/tokenizer")
+
+        assert "token_type_ids" in ds[0]
+
 
 class TestFirewallClassifier:
     def _make_mock_classifier(self):

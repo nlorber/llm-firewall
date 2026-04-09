@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import pytest
 
+from unittest.mock import MagicMock, patch
+
+import torch
+
 from data.prepare import LABEL_NAMES, deduplicate, harmonise_labels, stratified_split
-from firewall.classifier.dataset import LABEL2ID, _load_jsonl
+from firewall.classifier.dataset import LABEL2ID, _load_jsonl, create_dataloaders
 
 
 class TestHarmoniseLabels:
@@ -98,3 +102,30 @@ class TestLoadJsonl:
         texts, labels = _load_jsonl(jsonl)
         assert texts == []
         assert labels == []
+
+
+class TestCreateDataloaders:
+    def test_returns_three_dataloaders(self, tmp_path) -> None:
+        for name in ("train.jsonl", "val.jsonl", "test.jsonl"):
+            (tmp_path / name).write_text('{"text": "hello", "label": "benign"}\n')
+
+        with patch("firewall.classifier.dataset.AutoTokenizer") as mock_tok_cls:
+            mock_tok = MagicMock()
+            mock_tok.return_value = {
+                "input_ids": torch.zeros(1, 16, dtype=torch.long),
+                "attention_mask": torch.ones(1, 16, dtype=torch.long),
+            }
+            mock_tok_cls.from_pretrained.return_value = mock_tok
+
+            train_dl, val_dl, test_dl = create_dataloaders(
+                train_path=tmp_path / "train.jsonl",
+                val_path=tmp_path / "val.jsonl",
+                test_path=tmp_path / "test.jsonl",
+                tokenizer_name="dummy/tokenizer",
+                batch_size=1,
+                max_length=16,
+            )
+
+        assert len(list(train_dl)) == 1
+        assert len(list(val_dl)) == 1
+        assert len(list(test_dl)) == 1
