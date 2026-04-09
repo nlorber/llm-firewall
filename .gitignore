@@ -51,5 +51,8 @@ wandb/
 .DS_Store
 Thumbs.db
 
+# Local dev config for Claude Code
+AGENTS.md
+
 # Internal planning docs
-docs/superpowers/plans/
+docs/superpowers/
