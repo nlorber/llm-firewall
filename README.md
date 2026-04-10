@@ -78,6 +78,24 @@ SHAP token-level attributions highlight which tokens drove the classifier's deci
 
 ![SHAP token attribution](reports/shap_example.png)
 
+### Adversarial Robustness
+
+The classifier is evaluated against 20 adversarial prompts spanning 8 attack categories. Run `make test-integration` after training to reproduce.
+
+| Attack type | Examples | Expected detection |
+|---|---|---|
+| Payload splitting | Fragmented instructions across sentence parts | Yes — tokens still present |
+| Persona / roleplay | DAN jailbreak, "pretend you are..." | Yes — matches training distribution |
+| Instruction nesting | Hidden directives in markdown/HTML comments | Yes — instruction tokens visible |
+| Code injection | Malicious instructions in code blocks | Yes — "ignore", "system prompt" tokens present |
+| Case manipulation | aLtErNaTiNg CaSe obfuscation | Yes — subword tokenizer normalises |
+| Semantic obfuscation | Hypothetical framing, indirect exfiltration | Partial — depends on phrasing |
+| Base64 encoding | Encoded payloads with decode instructions | No — opaque to tokenizer (judge fallback) |
+| Unicode homoglyphs | Cyrillic/Coptic lookalike substitutions | No — tokenizer sees different tokens (judge fallback) |
+| Multilingual | French, Japanese, Spanish, Russian injections | No — English-centric training data (judge fallback) |
+
+**Known limitations:** The text classifier cannot see through encoding barriers (Base64, Unicode substitution) or languages absent from training data. These are architectural limitations of any token-level classifier. The hybrid design handles this by routing uncertain classifications (GRAY zone) to the LLM judge, which can decode Base64, read Unicode, and understand multilingual prompts.
+
 ## Design Decisions
 
 **Why a fine-tuned classifier + LLM judge, not just an LLM.** The classifier runs in ~10 ms at near-zero marginal cost. An LLM call takes ~500 ms at ~$0.003/prompt. The hybrid routes only the ambiguous 10–20% to the LLM, cutting cost by 80–90% vs. calling an LLM for every prompt while maintaining accuracy on edge cases. At 10K prompts/day: ~$3–6/day hybrid vs. ~$30/day pure LLM.
