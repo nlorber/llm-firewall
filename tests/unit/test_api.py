@@ -73,6 +73,14 @@ class TestAnalyzeEndpoint:
         response = test_client.post("/analyze", json={"prompt": "maybe bad"})
         assert response.json()["judge_invoked"] is True
 
+    def test_valid_request_with_context_returns_200(self, client) -> None:
+        test_client, mock_graph = client
+        mock_graph.invoke.return_value = _graph_result("PASS", "CLEAN", "benign", 0.1, False)
+        response = test_client.post(
+            "/analyze", json={"prompt": "hello world", "context": "You are a helpful assistant."},
+        )
+        assert response.status_code == 200
+
 
 class TestHealthEndpoint:
     def test_health_returns_200(self, client) -> None:

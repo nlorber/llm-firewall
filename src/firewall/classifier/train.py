@@ -24,6 +24,29 @@ from firewall.classifier.dataset import FirewallDataset, _load_jsonl
 logger = logging.getLogger(__name__)
 
 
+class WeightedTrainer(Trainer):
+    """Trainer subclass that applies class weights to the cross-entropy loss."""
+
+    def __init__(self, *, class_weights: torch.Tensor, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._class_weights = class_weights
+
+    def compute_loss(  # type: ignore[override]  # HF Trainer signature uses Any broadly; our override is safe
+        self,
+        model: Any,
+        inputs: dict[str, Any],
+        return_outputs: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        labels = inputs.pop("labels")
+        outputs = model(**inputs)
+        logits = outputs.logits
+        loss = torch.nn.functional.cross_entropy(
+            logits, labels, weight=self._class_weights.to(logits.device),
+        )
+        return (loss, outputs) if return_outputs else loss
+
+
 def compute_metrics(eval_pred: tuple[np.ndarray, np.ndarray]) -> dict[str, float]:
     """Compute accuracy + macro/weighted F1 for the HF Trainer callback."""
     logits, labels = eval_pred
@@ -80,23 +103,8 @@ def train(config_path: str | Path) -> None:
         report_to="none",
     )
 
-    class WeightedTrainer(Trainer):
-        """Trainer subclass that applies class weights to the cross-entropy loss."""
-
-        def compute_loss(  # type: ignore[override]  # HF Trainer signature uses Any broadly; our override is safe
-            self,
-            model: Any,
-            inputs: dict[str, Any],
-            return_outputs: bool = False,
-            **kwargs: Any,
-        ) -> Any:
-            labels = inputs.pop("labels")
-            outputs = model(**inputs)
-            logits = outputs.logits
-            loss = torch.nn.functional.cross_entropy(logits, labels, weight=class_weights.to(logits.device))
-            return (loss, outputs) if return_outputs else loss
-
     trainer = WeightedTrainer(
+        class_weights=class_weights,
         model=model,
         args=training_args,
         train_dataset=train_ds,

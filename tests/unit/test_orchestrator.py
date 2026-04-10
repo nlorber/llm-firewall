@@ -68,6 +68,30 @@ class TestClassifyNode:
         update = nodes_mod.classify_node(_make_state("maybe bad"))
         assert update["zone"] == "GRAY"
 
+    def test_score_at_clean_threshold_sets_gray_zone(self) -> None:
+        nodes_mod.init_nodes(
+            classifier=_mock_classifier("injection", 0.3),
+            judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
+        )
+        update = nodes_mod.classify_node(_make_state("borderline"))
+        assert update["zone"] == "GRAY"
+
+    def test_score_at_block_threshold_sets_block_zone(self) -> None:
+        nodes_mod.init_nodes(
+            classifier=_mock_classifier("injection", 0.8),
+            judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
+        )
+        update = nodes_mod.classify_node(_make_state("borderline block"))
+        assert update["zone"] == "BLOCK"
+
+    def test_score_just_below_clean_threshold_sets_clean(self) -> None:
+        nodes_mod.init_nodes(
+            classifier=_mock_classifier("injection", 0.29),
+            judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
+        )
+        update = nodes_mod.classify_node(_make_state("almost clean"))
+        assert update["zone"] == "CLEAN"
+
 
 class TestRouting:
     def test_route_after_classify_clean_returns_execute(self) -> None:

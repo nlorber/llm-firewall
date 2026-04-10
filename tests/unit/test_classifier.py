@@ -1,8 +1,10 @@
 # tests/test_classifier.py
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 import torch
 
 
@@ -144,6 +146,53 @@ class TestFirewallClassifier:
         assert save_dir.exists()
         mock_model.save_pretrained.assert_called_once_with(save_dir)
         mock_tok.save_pretrained.assert_called_once_with(save_dir)
+
+
+class TestWeightedTrainer:
+    @staticmethod
+    def _make_trainer(class_weights: torch.Tensor) -> Any:
+        """Create a WeightedTrainer without invoking the full HF Trainer __init__."""
+        from firewall.classifier.train import WeightedTrainer
+
+        trainer = object.__new__(WeightedTrainer)
+        trainer._class_weights = class_weights
+        return trainer
+
+    def test_compute_loss_applies_class_weights(self) -> None:
+        class_weights = torch.tensor([1.0, 2.0, 3.0])
+        logits = torch.tensor([[2.0, 0.5, 0.1]], dtype=torch.float32)
+        labels = torch.tensor([1])
+
+        mock_model = MagicMock()
+        mock_model.return_value.logits = logits
+
+        trainer = self._make_trainer(class_weights)
+        inputs: dict[str, Any] = {
+            "input_ids": torch.zeros(1, 4, dtype=torch.long),
+            "attention_mask": torch.ones(1, 4, dtype=torch.long),
+            "labels": labels,
+        }
+        loss = trainer.compute_loss(mock_model, inputs)
+        expected = torch.nn.functional.cross_entropy(logits, labels, weight=class_weights)
+        assert loss.item() == pytest.approx(expected.item())
+
+    def test_compute_loss_returns_tuple_when_requested(self) -> None:
+        class_weights = torch.tensor([1.0, 1.0, 1.0])
+        mock_model = MagicMock()
+        mock_outputs = MagicMock()
+        mock_outputs.logits = torch.tensor([[1.0, 0.0, 0.0]], dtype=torch.float32)
+        mock_model.return_value = mock_outputs
+
+        trainer = self._make_trainer(class_weights)
+        inputs: dict[str, Any] = {
+            "input_ids": torch.zeros(1, 4, dtype=torch.long),
+            "attention_mask": torch.ones(1, 4, dtype=torch.long),
+            "labels": torch.tensor([0]),
+        }
+        result = trainer.compute_loss(mock_model, inputs, return_outputs=True)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert result[1] is mock_outputs
 
 
 class TestComputeMetrics:
