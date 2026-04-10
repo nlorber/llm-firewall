@@ -1,6 +1,7 @@
 # src/firewall/orchestrator/nodes.py
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -8,6 +9,7 @@ if TYPE_CHECKING:
     from firewall.classifier.model import FirewallClassifier
     from firewall.judge.judge import LLMJudge
 
+from firewall.orchestrator.metrics import classify_duration, classification_label_total
 from firewall.orchestrator.state import (
     FirewallState,  # noqa: TCH001 — LangGraph introspects annotations
 )
@@ -36,7 +38,9 @@ def init_nodes(
 def classify_node(state: FirewallState) -> dict[str, Any]:
     """Run classifier and assign zone."""
     assert _classifier is not None, "call init_nodes() before using the graph"
+    start = time.perf_counter()
     results = _classifier.predict([state["prompt"]])
+    elapsed = time.perf_counter() - start
     scores = results[0]
     top_label = max(scores, key=scores.__getitem__)
     top_score = scores[top_label]
@@ -53,6 +57,9 @@ def classify_node(state: FirewallState) -> dict[str, Any]:
         zone = "GRAY"
     else:
         zone = "CLEAN"
+
+    classify_duration.labels(zone=zone).observe(elapsed)
+    classification_label_total.labels(label=top_label).inc()
 
     return {
         "classification": {
