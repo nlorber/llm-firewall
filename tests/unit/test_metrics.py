@@ -27,14 +27,14 @@ class TestMetricDefinitions:
     def test_requests_total_exists(self) -> None:
         from firewall.orchestrator.metrics import requests_total
 
-        assert "firewall_requests" in requests_total._name
+        assert requests_total._name == "firewall_requests"
         assert "zone" in requests_total._labelnames
         assert "final_decision" in requests_total._labelnames
 
     def test_classification_label_total_exists(self) -> None:
         from firewall.orchestrator.metrics import classification_label_total
 
-        assert "firewall_classification_label" in classification_label_total._name
+        assert classification_label_total._name == "firewall_classification_label"
         assert "label" in classification_label_total._labelnames
 
 
@@ -138,9 +138,10 @@ class TestMetricsEndpoint:
              patch("firewall.api.app.build_graph", return_value=mock_graph), \
              patch("firewall.api.app._load_config") as mock_cfg:
             mock_cfg.return_value = {
-                "model_path": "dummy", "clean_threshold": 0.3,
-                "block_threshold": 0.8, "judge_model": "dummy",
-                "judge_max_tokens": 128, "retry_count": 1,
+                "model_path": "dummy", "max_length": 512,
+                "clean_threshold": 0.3, "block_threshold": 0.8,
+                "judge_model": "dummy", "judge_max_tokens": 128,
+                "retry_count": 1,
             }
             from firewall.api.app import create_app
             app = create_app()

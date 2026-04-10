@@ -20,14 +20,14 @@ judge_duration = Histogram(
 )
 
 requests_total = Counter(
-    "firewall_requests",
+    "firewall_requests_total",
     "Total analyzed requests",
     labelnames=["zone", "final_decision"],
     registry=REGISTRY,
 )
 
 classification_label_total = Counter(
-    "firewall_classification_label",
+    "firewall_classification_label_total",
     "Classification counts by label",
     labelnames=["label"],
     registry=REGISTRY,
