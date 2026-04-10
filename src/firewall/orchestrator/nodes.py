@@ -9,7 +9,11 @@ if TYPE_CHECKING:
     from firewall.classifier.model import FirewallClassifier
     from firewall.judge.judge import LLMJudge
 
-from firewall.orchestrator.metrics import classify_duration, classification_label_total
+from firewall.orchestrator.metrics import (
+    classification_label_total,
+    classify_duration,
+    judge_duration,
+)
 from firewall.orchestrator.state import (
     FirewallState,  # noqa: TCH001 — LangGraph introspects annotations
 )
@@ -77,11 +81,14 @@ def judge_node(state: FirewallState) -> dict[str, Any]:
     assert _judge is not None, "call init_nodes() before using the graph"
     clf = state["classification"]
     assert clf is not None, "classify_node must run before judge_node"
+    start = time.perf_counter()
     verdict = _judge.judge(
         prompt=state["prompt"],
         classification_label=clf["label"],
         scores=clf["scores"],
     )
+    elapsed = time.perf_counter() - start
+    judge_duration.labels(decision=verdict.decision).observe(elapsed)
     return {
         "judge_result": {
             "decision":   verdict.decision,

@@ -32,6 +32,7 @@ class TestMetricDefinitions:
 from unittest.mock import MagicMock
 
 import firewall.orchestrator.nodes as nodes_mod
+from firewall.judge.judge import JudgeVerdict
 from firewall.orchestrator.metrics import REGISTRY
 from firewall.orchestrator.state import FirewallState
 
@@ -80,4 +81,24 @@ class TestClassifyNodeMetrics:
         before = _metric_value("firewall_classification_label_total", {"label": "injection"})
         nodes_mod.classify_node(_make_state("bad"))
         after = _metric_value("firewall_classification_label_total", {"label": "injection"})
+        assert after == before + 1
+
+
+class TestJudgeNodeMetrics:
+    def test_judge_observes_duration_histogram(self) -> None:
+        mock_judge = MagicMock()
+        mock_judge.judge.return_value = JudgeVerdict(
+            decision="BLOCK", reasoning="suspicious", confidence=0.85,
+        )
+        nodes_mod.init_nodes(
+            classifier=_mock_classifier("benign", 0.1),
+            judge=mock_judge, clean_threshold=0.3, block_threshold=0.8,
+        )
+        state = {
+            **_make_state("test"),
+            "classification": {"label": "jailbreak", "scores": {"jailbreak": 0.55}},
+        }
+        before = _metric_value("firewall_judge_duration_seconds_count", {"decision": "BLOCK"})
+        nodes_mod.judge_node(state)
+        after = _metric_value("firewall_judge_duration_seconds_count", {"decision": "BLOCK"})
         assert after == before + 1
