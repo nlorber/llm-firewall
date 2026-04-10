@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,8 @@ from sklearn.metrics import (
 
 from firewall.classifier.dataset import LABEL2ID
 from firewall.classifier.model import load_classifier
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_EVAL_BATCH_SIZE = 32
 
@@ -66,10 +69,10 @@ def main() -> None:
         test_path=config["test_path"],
         label_names=config["label_names"],
     )
-    print(f"Accuracy:    {results['accuracy']:.4f}")
-    print(f"F1 macro:    {results['f1_macro']:.4f}")
-    print(f"F1 weighted: {results['f1_weighted']:.4f}")
-    print("\nClassification report:\n", results["classification_report"])
+    logger.info("Accuracy:    %.4f", results["accuracy"])
+    logger.info("F1 macro:    %.4f", results["f1_macro"])
+    logger.info("F1 weighted: %.4f", results["f1_weighted"])
+    logger.info("Classification report:\n%s", results["classification_report"])
 
 
 if __name__ == "__main__":
