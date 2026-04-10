@@ -1,6 +1,15 @@
 # tests/test_metrics.py
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
+from fastapi.testclient import TestClient
+
+import firewall.orchestrator.nodes as nodes_mod
+from firewall.judge.judge import JudgeVerdict
+from firewall.orchestrator.metrics import REGISTRY
+from firewall.orchestrator.state import FirewallState
+
 
 class TestMetricDefinitions:
     def test_classify_duration_exists(self) -> None:
@@ -27,14 +36,6 @@ class TestMetricDefinitions:
 
         assert "firewall_classification_label" in classification_label_total._name
         assert "label" in classification_label_total._labelnames
-
-
-from unittest.mock import MagicMock
-
-import firewall.orchestrator.nodes as nodes_mod
-from firewall.judge.judge import JudgeVerdict
-from firewall.orchestrator.metrics import REGISTRY
-from firewall.orchestrator.state import FirewallState
 
 
 def _make_state(prompt: str = "hello") -> FirewallState:
@@ -126,3 +127,40 @@ class TestTerminalNodeMetrics:
         nodes_mod.log_node(state)
         after = _metric_value("firewall_requests_total", {"zone": "BLOCK", "final_decision": "BLOCK"})
         assert after == before + 1
+
+
+class TestMetricsEndpoint:
+    @staticmethod
+    def _make_client() -> TestClient:
+        mock_clf = MagicMock()
+        mock_graph = MagicMock()
+        with patch("firewall.api.app.load_classifier", return_value=mock_clf), \
+             patch("firewall.api.app.build_graph", return_value=mock_graph), \
+             patch("firewall.api.app._load_config") as mock_cfg:
+            mock_cfg.return_value = {
+                "model_path": "dummy", "clean_threshold": 0.3,
+                "block_threshold": 0.8, "judge_model": "dummy",
+                "judge_max_tokens": 128, "retry_count": 1,
+            }
+            from firewall.api.app import create_app
+            app = create_app()
+        return TestClient(app)
+
+    def test_metrics_returns_200(self) -> None:
+        client = self._make_client()
+        response = client.get("/metrics")
+        assert response.status_code == 200
+
+    def test_metrics_content_type_is_text_plain(self) -> None:
+        client = self._make_client()
+        response = client.get("/metrics")
+        assert "text/plain" in response.headers["content-type"]
+
+    def test_metrics_body_contains_firewall_metrics(self) -> None:
+        client = self._make_client()
+        response = client.get("/metrics")
+        body = response.text
+        assert "firewall_classify_duration_seconds" in body
+        assert "firewall_judge_duration_seconds" in body
+        assert "firewall_requests" in body
+        assert "firewall_classification_label" in body

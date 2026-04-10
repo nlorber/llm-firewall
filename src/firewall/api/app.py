@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 import yaml
 from fastapi import FastAPI
+from prometheus_client import generate_latest
+from starlette.responses import Response
 
 from firewall.api.schemas import (
     AnalysisRequest,
@@ -22,6 +24,7 @@ from firewall.api.schemas import (
 from firewall.classifier.model import load_classifier
 from firewall.judge.judge import LLMJudge
 from firewall.orchestrator.graph import build_graph
+from firewall.orchestrator.metrics import REGISTRY
 
 
 def _load_config() -> dict[str, Any]:
@@ -98,6 +101,13 @@ def create_app() -> FastAPI:
         return HealthResponse(
             status="ok",
             model_loaded=getattr(app.state, "model_loaded", False),
+        )
+
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        return Response(
+            content=generate_latest(REGISTRY),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
         )
 
     return app
