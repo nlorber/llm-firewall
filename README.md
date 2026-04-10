@@ -221,6 +221,20 @@ curl http://localhost:8000/health
 {"status": "ok", "model_loaded": true}
 ```
 
+### `GET /metrics`
+
+Prometheus metrics endpoint. Returns request-scoped counters and histograms.
+
+```bash
+curl http://localhost:8000/metrics
+```
+
+Key metrics:
+- `firewall_classify_duration_seconds` — classifier inference latency (by zone)
+- `firewall_judge_duration_seconds` — LLM judge call latency (by decision)
+- `firewall_requests_total` — total requests (by zone and decision)
+- `firewall_classification_label_total` — classification distribution (by label)
+
 ## Configuration
 
 ### `configs/training.yaml`
