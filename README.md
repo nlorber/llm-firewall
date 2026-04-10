@@ -211,11 +211,31 @@ curl http://localhost:8000/health
 |---|---|---|
 | `model_name` | `microsoft/deberta-v3-base` | HuggingFace model identifier |
 | `num_labels` | `5` | Number of threat classes |
+| `label_names` | `[benign, injection, ...]` | Ordered class labels (must match `num_labels`) |
+| `train_path` | `data/processed/train.jsonl` | Training split path |
+| `val_path` | `data/processed/val.jsonl` | Validation split path |
+| `test_path` | `data/processed/test.jsonl` | Test split path |
+| `max_length` | `128` | Token sequence length (training only; serving uses 512) |
 | `learning_rate` | `2.0e-5` | AdamW learning rate |
 | `batch_size` | `8` | Per-device batch size |
 | `num_epochs` | `10` | Maximum training epochs |
+| `warmup_ratio` | `0.1` | Fraction of steps for LR warmup |
+| `weight_decay` | `0.01` | AdamW weight decay |
 | `early_stopping_patience` | `3` | Epochs without F1 improvement before stopping |
-| `max_length` | `128` | Token sequence length |
+| `fp16` | `false` | Enable mixed-precision (set `true` for CUDA GPUs) |
+| `output_dir` | `models/classifier` | Checkpoint save directory |
+| `seed` | `42` | Random seed for reproducibility |
+
+### `configs/serving.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `host` | `0.0.0.0` | Server bind address |
+| `port` | `8000` | Server port |
+| `log_level` | `info` | Uvicorn log level |
+| `model_path` | `models/classifier` | Path to fine-tuned checkpoint (overridden by `MODEL_PATH` env var) |
+| `max_length` | `512` | Token sequence length for inference (higher than training's 128 to handle longer prompts) |
+| `batch_size` | `1` | Inference batch size (increase for batch endpoints) |
 
 ### `configs/orchestrator.yaml`
 
@@ -226,6 +246,7 @@ curl http://localhost:8000/health
 | `judge_model` | `claude-sonnet-4-20250514` | Claude model for the LLM judge |
 | `judge_max_tokens` | `512` | Max tokens for judge response |
 | `retry_count` | `2` | JSON parse retries for judge |
+| `log_dir` | `logs/` | Directory for structured block event logs |
 
 ### Environment Variables
 
