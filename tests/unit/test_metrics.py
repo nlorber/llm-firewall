@@ -102,3 +102,27 @@ class TestJudgeNodeMetrics:
         nodes_mod.judge_node(state)
         after = _metric_value("firewall_judge_duration_seconds_count", {"decision": "BLOCK"})
         assert after == before + 1
+
+
+class TestTerminalNodeMetrics:
+    def test_execute_node_increments_requests_total(self) -> None:
+        nodes_mod.init_nodes(
+            classifier=_mock_classifier("benign", 0.9),
+            judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
+        )
+        state = {**_make_state("hello"), "zone": "CLEAN", "classification": {"label": "benign", "top_score": 0.9}}
+        before = _metric_value("firewall_requests_total", {"zone": "CLEAN", "final_decision": "PASS"})
+        nodes_mod.execute_node(state)
+        after = _metric_value("firewall_requests_total", {"zone": "CLEAN", "final_decision": "PASS"})
+        assert after == before + 1
+
+    def test_log_node_increments_requests_total(self) -> None:
+        nodes_mod.init_nodes(
+            classifier=_mock_classifier("injection", 0.95),
+            judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
+        )
+        state = {**_make_state("bad"), "zone": "BLOCK", "classification": {"label": "injection", "top_score": 0.95}}
+        before = _metric_value("firewall_requests_total", {"zone": "BLOCK", "final_decision": "BLOCK"})
+        nodes_mod.log_node(state)
+        after = _metric_value("firewall_requests_total", {"zone": "BLOCK", "final_decision": "BLOCK"})
+        assert after == before + 1

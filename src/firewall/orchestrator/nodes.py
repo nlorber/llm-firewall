@@ -13,6 +13,7 @@ from firewall.orchestrator.metrics import (
     classification_label_total,
     classify_duration,
     judge_duration,
+    requests_total,
 )
 from firewall.orchestrator.state import (
     FirewallState,  # noqa: TCH001 — LangGraph introspects annotations
@@ -104,6 +105,7 @@ def execute_node(state: FirewallState) -> dict[str, Any]:
     label = clf.get("label", "unknown")
     score = clf.get("top_score", 0.0)
     explanation = f"Prompt classified as '{label}' (score {score:.2f}) — below block threshold. PASS."
+    requests_total.labels(zone=state.get("zone", "unknown"), final_decision="PASS").inc()
     return {"final_decision": "PASS", "explanation": explanation}
 
 
@@ -131,6 +133,7 @@ def log_node(state: FirewallState) -> dict[str, Any]:
         "explanation":  explanation,
     }
 
+    requests_total.labels(zone=state.get("zone", "unknown"), final_decision="BLOCK").inc()
     existing_logs: list[dict[str, Any]] = list(state.get("logs") or [])
     return {
         "final_decision": "BLOCK",
