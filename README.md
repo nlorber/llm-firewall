@@ -271,7 +271,6 @@ Key metrics:
 | `log_level` | `info` | Uvicorn log level |
 | `model_path` | `models/classifier` | Path to fine-tuned checkpoint (overridden by `MODEL_PATH` env var) |
 | `max_length` | `512` | Token sequence length for inference (higher than training's 128 to handle longer prompts) |
-| `batch_size` | `1` | Inference batch size (increase for batch endpoints) |
 
 ### `configs/orchestrator.yaml`
 
@@ -282,7 +281,6 @@ Key metrics:
 | `judge_model` | `claude-sonnet-4-20250514` | Claude model for the LLM judge |
 | `judge_max_tokens` | `512` | Max tokens for judge response |
 | `retry_count` | `2` | JSON parse retries for judge |
-| `log_dir` | `logs/` | Directory for structured block event logs |
 
 ### Environment Variables
 

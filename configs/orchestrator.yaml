@@ -13,6 +13,3 @@ block_threshold: 0.8
 judge_model:      "claude-sonnet-4-20250514"
 judge_max_tokens: 512
 retry_count:      2
-
-# Logging
-log_dir: "logs/"

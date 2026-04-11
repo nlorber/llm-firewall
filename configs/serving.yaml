@@ -10,4 +10,3 @@ model_path: "models/classifier"
 
 # Inference
 max_length: 512
-batch_size: 1  # single-request latency target; increase for batch endpoints
