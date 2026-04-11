@@ -2,7 +2,7 @@
 
 > Agentic prompt threat classifier: fine-tuned DeBERTa-v3-base + LangGraph orchestration.
 
-[![CI](https://github.com/nlorber/llm-firewall/actions/workflows/ci.yml/badge.svg)](https://github.com/nlorber/llm-firewall/actions/workflows/ci.yml)
+[![CI](https://github.com/nlorber/llm-firewall/actions/workflows/test.yml/badge.svg)](https://github.com/nlorber/llm-firewall/actions/workflows/test.yml)
 ![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/nlorber/658807b3d9251dbce468b6c738ccd10d/raw/coverage-llm-firewall.json)
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![mypy](https://img.shields.io/badge/type_check-mypy_strict-blue)
