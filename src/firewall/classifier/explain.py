@@ -11,10 +11,17 @@ if TYPE_CHECKING:
     from firewall.classifier.model import FirewallClassifier
 
 
+_DEFAULT_MAX_EVALS = 500
+_MIN_FIGSIZE = 6
+_FIGSIZE_DIVISOR = 2
+_TICK_FONTSIZE = 8
+_SAVE_DPI = 150
+
+
 class SHAPExplainer:
     """Token-level SHAP attributions for the firewall classifier."""
 
-    def __init__(self, model: Any, max_evals: int = 500) -> None:
+    def __init__(self, model: Any, max_evals: int = _DEFAULT_MAX_EVALS) -> None:
         self._model = model
 
         def _predict_proba(texts: list[str]) -> np.ndarray[Any, np.dtype[Any]]:
@@ -69,16 +76,16 @@ def plot_attention_heatmap(
     attn = outputs.attentions[layer][0, head].cpu().numpy()
 
     n = len(tokens)
-    fig, ax = plt.subplots(figsize=(max(6, n // 2), max(6, n // 2)))
+    fig, ax = plt.subplots(figsize=(max(_MIN_FIGSIZE, n // _FIGSIZE_DIVISOR), max(_MIN_FIGSIZE, n // _FIGSIZE_DIVISOR)))
     im = ax.imshow(attn[:n, :n], cmap="Blues")
     ax.set_xticks(range(n))
     ax.set_yticks(range(n))
-    ax.set_xticklabels(tokens, rotation=90, fontsize=8)
-    ax.set_yticklabels(tokens, fontsize=8)
+    ax.set_xticklabels(tokens, rotation=90, fontsize=_TICK_FONTSIZE)
+    ax.set_yticklabels(tokens, fontsize=_TICK_FONTSIZE)
     ax.set_title(f"Attention layer {layer} head {head}")
     plt.colorbar(im, ax=ax)
     plt.tight_layout()
     out = Path(output_path)
-    fig.savefig(out, dpi=150, bbox_inches="tight")
+    fig.savefig(out, dpi=_SAVE_DPI, bbox_inches="tight")
     plt.close(fig)
     return out

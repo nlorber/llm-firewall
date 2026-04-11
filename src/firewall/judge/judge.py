@@ -22,14 +22,19 @@ class JudgeVerdict:
     confidence: float
 
 
+_DEFAULT_MODEL = "claude-sonnet-4-20250514"
+_DEFAULT_MAX_TOKENS = 512
+_DEFAULT_RETRY_COUNT = 2
+
+
 class LLMJudge:
     """Invokes Claude to make a final PASS/BLOCK decision on GRAY zone prompts."""
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-20250514",
-        max_tokens: int = 512,
-        retry_count: int = 2,
+        model: str = _DEFAULT_MODEL,
+        max_tokens: int = _DEFAULT_MAX_TOKENS,
+        retry_count: int = _DEFAULT_RETRY_COUNT,
     ) -> None:
         self._model = model
         self._max_tokens = max_tokens

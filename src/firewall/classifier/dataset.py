@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import AutoTokenizer
 
 LABEL_NAMES: list[str] = ["benign", "injection", "jailbreak", "exfiltration", "escalation"]
+NUM_LABELS: int = len(LABEL_NAMES)
 LABEL2ID: dict[str, int] = {lbl: i for i, lbl in enumerate(LABEL_NAMES)}
 
 

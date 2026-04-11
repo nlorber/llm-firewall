@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from firewall.orchestrator.nodes import DEFAULT_BLOCK_THRESHOLD, DEFAULT_CLEAN_THRESHOLD
+
 if TYPE_CHECKING:
     from firewall.classifier.model import FirewallClassifier
     from firewall.judge.judge import LLMJudge
@@ -11,8 +13,8 @@ if TYPE_CHECKING:
 def build_graph(
     classifier: FirewallClassifier,
     judge: LLMJudge,
-    clean_threshold: float = 0.3,
-    block_threshold: float = 0.8,
+    clean_threshold: float = DEFAULT_CLEAN_THRESHOLD,
+    block_threshold: float = DEFAULT_BLOCK_THRESHOLD,
 ) -> Any:  # langgraph compiled graph has no public type; Any is appropriate here
     """Assemble and compile the firewall LangGraph StateGraph.
 

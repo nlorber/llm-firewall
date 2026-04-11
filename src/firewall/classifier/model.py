@@ -5,6 +5,8 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from firewall.classifier.dataset import NUM_LABELS
+
 
 class FirewallClassifier:
     """Fine-tuned DeBERTa-v3-base sequence classifier for prompt threat detection."""
@@ -12,7 +14,7 @@ class FirewallClassifier:
     def __init__(
         self,
         model_name_or_path: str,
-        num_labels: int = 5,
+        num_labels: int = NUM_LABELS,
         device: str | None = None,
         max_length: int = 512,
     ) -> None:

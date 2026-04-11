@@ -19,18 +19,21 @@ from firewall.orchestrator.state import (
     FirewallState,  # noqa: TCH001 — LangGraph introspects annotations
 )
 
+DEFAULT_CLEAN_THRESHOLD: float = 0.3
+DEFAULT_BLOCK_THRESHOLD: float = 0.8
+
 # Module-level state — populated by init_nodes() before building the graph
 _classifier: FirewallClassifier | None = None
 _judge: LLMJudge | None = None
-_clean_threshold: float = 0.3
-_block_threshold: float = 0.8
+_clean_threshold: float
+_block_threshold: float
 
 
 def init_nodes(
     classifier: FirewallClassifier,
     judge: LLMJudge,
-    clean_threshold: float = 0.3,
-    block_threshold: float = 0.8,
+    clean_threshold: float = DEFAULT_CLEAN_THRESHOLD,
+    block_threshold: float = DEFAULT_BLOCK_THRESHOLD,
 ) -> None:
     """Inject shared resources before building the graph. Call once at startup."""
     global _classifier, _judge, _clean_threshold, _block_threshold
