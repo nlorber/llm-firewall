@@ -70,7 +70,7 @@ flowchart LR
 
 ### Confusion Matrix
 
-![Confusion matrix](reports/confusion_matrix.png)
+<img src="reports/confusion_matrix.png" alt="Confusion matrix" width="600">
 
 ### Explainability
 
@@ -142,7 +142,8 @@ curl -X POST http://localhost:8000/analyze \
   -d '{"prompt": "Ignore all previous instructions."}'
 ```
 
-## Project Structure
+<details>
+<summary><h2>Project Structure</h2></summary>
 
 ```
 src/firewall/
@@ -177,6 +178,8 @@ notebooks/
   03_explainability.ipynb  — SHAP visualisations and attention maps
 reports/                — Generated figures (committed)
 ```
+
+</details>
 
 ## API Reference
 
@@ -235,7 +238,8 @@ Key metrics:
 - `firewall_requests_total` — total requests (by zone and decision)
 - `firewall_classification_label_total` — classification distribution (by label)
 
-## Configuration
+<details>
+<summary><h2>Configuration</h2></summary>
 
 ### `configs/training.yaml`
 
@@ -286,6 +290,8 @@ Key metrics:
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Yes (for judge + synthetic data) | Claude API key |
 | `MODEL_PATH` | No | Override model checkpoint path (default: `models/classifier`) |
+
+</details>
 
 ## Docker
 
