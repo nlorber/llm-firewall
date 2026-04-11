@@ -13,12 +13,9 @@ class AnalysisRequest(BaseModel):
 
     Attributes:
         prompt: The raw user prompt to analyse.
-        context: Optional surrounding context (e.g. system prompt). Accepted but
-            not yet used by the classification pipeline.
     """
 
     prompt: str = Field(..., min_length=1, max_length=8192)
-    context: str | None = Field(default=None, max_length=8192)
 
 
 class ClassificationScore(BaseModel):

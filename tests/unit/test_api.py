@@ -73,13 +73,6 @@ class TestAnalyzeEndpoint:
         response = test_client.post("/analyze", json={"prompt": "maybe bad"})
         assert response.json()["judge_invoked"] is True
 
-    def test_valid_request_with_context_returns_200(self, client) -> None:
-        test_client, mock_graph = client
-        mock_graph.invoke.return_value = _graph_result("PASS", "CLEAN", "benign", 0.1, False)
-        response = test_client.post(
-            "/analyze", json={"prompt": "hello world", "context": "You are a helpful assistant."},
-        )
-        assert response.status_code == 200
 
 
 class TestHealthEndpoint:
@@ -111,13 +104,6 @@ class TestSchemaValidation:
         with pytest.raises(ValidationError, match="string_too_long"):
             AnalysisRequest(prompt="x" * 8193)
 
-    def test_context_max_length_rejects_oversized(self) -> None:
-        with pytest.raises(ValidationError, match="string_too_long"):
-            AnalysisRequest(prompt="valid", context="x" * 8193)
-
-    def test_context_none_is_valid(self) -> None:
-        req = AnalysisRequest(prompt="hello")
-        assert req.context is None
 
     def test_score_ge_rejects_negative(self) -> None:
         with pytest.raises(ValidationError, match="greater than or equal"):
