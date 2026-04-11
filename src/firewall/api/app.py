@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 import yaml
 from fastapi import FastAPI, HTTPException
-from prometheus_client import generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
 from firewall.api.schemas import (
@@ -117,7 +117,7 @@ def create_app() -> FastAPI:
     async def metrics() -> Response:
         return Response(
             content=generate_latest(REGISTRY),
-            media_type="text/plain; version=0.0.4; charset=utf-8",
+            media_type=CONTENT_TYPE_LATEST,
         )
 
     return app
