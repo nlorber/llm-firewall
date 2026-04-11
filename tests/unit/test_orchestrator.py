@@ -185,7 +185,7 @@ class TestLogNode:
     def test_log_node_with_judge_result_uses_judge_reasoning(self) -> None:
         state = {
             **_make_state("ambiguous prompt"),
-            "classification": {"label": "jailbreak", "label_id": 2,
+            "classification": {"label": "jailbreak",
                                "scores": {"jailbreak": 0.55}, "top_score": 0.55,
                                "threat_score": 0.55},
             "zone": "GRAY",

@@ -12,7 +12,6 @@ class ClassificationResult(TypedDict):
     """Output produced by the classifier node."""
 
     label: str
-    label_id: int
     scores: dict[str, float]   # label → probability for all classes
     top_score: float            # highest probability across all labels (including benign)
     threat_score: float         # max non-benign probability (used for zone assignment)
