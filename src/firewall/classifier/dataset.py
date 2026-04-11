@@ -62,10 +62,14 @@ class FirewallDataset(Dataset[dict[str, torch.Tensor]]):
 def _load_jsonl(path: Path) -> tuple[list[str], list[int]]:
     texts, labels = [], []
     with path.open() as f:
-        for line in f:
+        for lineno, line in enumerate(f, 1):
             r = json.loads(line)
+            raw_label = r["label"]
+            if raw_label not in LABEL2ID:
+                msg = f"Unknown label {raw_label!r} at line {lineno} in {path}"
+                raise ValueError(msg)
             texts.append(r["text"])
-            labels.append(LABEL2ID[r["label"]])
+            labels.append(LABEL2ID[raw_label])
     return texts, labels
 
 

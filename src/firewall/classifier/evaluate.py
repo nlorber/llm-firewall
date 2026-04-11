@@ -32,11 +32,16 @@ def evaluate(
     clf = load_classifier(model_path)
 
     texts, y_true = [], []
-    with Path(test_path).open() as f:
-        for line in f:
+    test_file = Path(test_path)
+    with test_file.open() as f:
+        for lineno, line in enumerate(f, 1):
             r = json.loads(line)
+            raw_label = r["label"]
+            if raw_label not in LABEL2ID:
+                msg = f"Unknown label {raw_label!r} at line {lineno} in {test_file}"
+                raise ValueError(msg)
             texts.append(r["text"])
-            y_true.append(LABEL2ID[r["label"]])
+            y_true.append(LABEL2ID[raw_label])
     all_pred_labels: list[str] = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
