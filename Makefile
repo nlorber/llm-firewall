@@ -1,7 +1,7 @@
-.PHONY: install train evaluate serve test lint format clean docker-build
+.PHONY: setup train evaluate serve test lint format clean docker-build
 
 ## Install all dependencies with uv and set up pre-commit hooks
-install:
+setup:
 	uv sync --extra dev
 	uv run pre-commit install
 
