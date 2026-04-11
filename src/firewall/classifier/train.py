@@ -78,6 +78,7 @@ def train(config_path: str | Path) -> None:
     val_texts, val_labels = _load_jsonl(Path(config["val_path"]))
 
     tokenizer_name = config["model_name"]
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)  # type: ignore[no-untyped-call]
     train_ds = FirewallDataset(train_texts, train_labels, tokenizer_name, config["max_length"])
     val_ds   = FirewallDataset(val_texts, val_labels, tokenizer_name, config["max_length"])
 
@@ -109,6 +110,7 @@ def train(config_path: str | Path) -> None:
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=val_ds,
+        processing_class=tokenizer,
         compute_metrics=compute_metrics,
         callbacks=[EarlyStoppingCallback(
             early_stopping_patience=config["early_stopping_patience"]
@@ -117,7 +119,6 @@ def train(config_path: str | Path) -> None:
 
     trainer.train()
     trainer.save_model(config["output_dir"])
-    AutoTokenizer.from_pretrained(tokenizer_name).save_pretrained(config["output_dir"])  # type: ignore[no-untyped-call]
     logger.info("model saved to %s", config["output_dir"])
 
 
