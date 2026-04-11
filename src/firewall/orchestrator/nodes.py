@@ -25,8 +25,8 @@ DEFAULT_BLOCK_THRESHOLD: float = 0.8
 # Module-level state — populated by init_nodes() before building the graph
 _classifier: FirewallClassifier | None = None
 _judge: LLMJudge | None = None
-_clean_threshold: float
-_block_threshold: float
+_clean_threshold: float = DEFAULT_CLEAN_THRESHOLD
+_block_threshold: float = DEFAULT_BLOCK_THRESHOLD
 
 
 def init_nodes(
