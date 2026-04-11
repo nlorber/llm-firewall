@@ -96,19 +96,13 @@ The classifier is evaluated against 20 adversarial prompts spanning 8 attack cat
 
 **Known limitations:** The text classifier cannot see through encoding barriers (Base64, Unicode substitution) or languages absent from training data. These are architectural limitations of any token-level classifier. The hybrid design handles this by routing uncertain classifications (GRAY zone) to the LLM judge, which can decode Base64, read Unicode, and understand multilingual prompts.
 
-## Design Decisions
+## Why This Design
 
-**Why a fine-tuned classifier + LLM judge, not just an LLM.** The classifier runs in ~10 ms at near-zero marginal cost. An LLM call takes ~500 ms at ~$0.003/prompt. The hybrid routes only the ambiguous 10–20% to the LLM, cutting cost by 80–90% vs. calling an LLM for every prompt while maintaining accuracy on edge cases. At 10K prompts/day: ~$3–6/day hybrid vs. ~$30/day pure LLM.
-
-**Why DeBERTa-v3-base over BERT/RoBERTa.** Disentangled attention decomposes content and position signals, which matters for adversarial text where attackers manipulate word order. The v3 variant uses ELECTRA-style pretraining for better sample efficiency on small datasets. At 86M parameters, it's actually smaller than BERT-base (110M) while being more accurate on NLU benchmarks.
-
-**Why 3-zone routing (CLEAN/GRAY/BLOCK).** Binary classification forces a hard decision on ambiguous prompts. The gray zone defers uncertain cases to a second opinion rather than silently passing or blocking them. Thresholds (0.3/0.8) are configurable per-deployment.
-
-**Why LangGraph over a simple if/else.** The routing logic is simple today, but the graph structure makes it trivial to add nodes (rate limiting, A/B testing, multi-model ensemble) without refactoring control flow. It also demonstrates fluency with the agentic orchestration pattern.
-
-**Why SHAP for explainability.** Token-level attribution shows which words drove the classification — critical for debugging false positives in a security context where operators need to understand why a prompt was blocked.
-
-**Why class weighting over oversampling.** With ~1,270 examples and 5 classes (some with <200 samples), oversampling risks memorisation. Inverse-frequency class weights in the loss function achieve balance without duplicating data.
+- **Hybrid classifier + LLM judge** — DeBERTa handles clear cases (~10ms), Claude judges the gray zone (10-20% of traffic). _Cuts LLM API costs by 80-90%. At 10K prompts/day: ~$3-6 hybrid vs ~$30 pure LLM._
+- **DeBERTa-v3 over BERT/RoBERTa** — disentangled attention + ELECTRA pretraining. _Disentangled attention matters for adversarial text where attackers manipulate word order and position. ELECTRA pretraining is more sample-efficient on small datasets (~1,270 examples)._
+- **Three-zone routing (clean/gray/block)** — configurable thresholds (0.3/0.8 defaults). _Binary classification forces a single decision boundary; the gray zone lets you tune the cost of false positives (user friction) vs false negatives (security breach) per deployment._
+- **F1 macro as primary metric** — not accuracy. _Accuracy is dominated by the majority class. For security, a missed jailbreak matters as much as a missed injection, regardless of class frequency._
+- **SHAP explainability for audit** — token-level attribution on flagged prompts. _When the classifier blocks a legitimate prompt, support needs to explain why. SHAP runs in ~2-5 seconds — acceptable for post-hoc audit, not inference._
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the full technical deep-dive.
 
