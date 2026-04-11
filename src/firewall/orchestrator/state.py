@@ -14,7 +14,8 @@ class ClassificationResult(TypedDict):
     label: str
     label_id: int
     scores: dict[str, float]   # label → probability for all classes
-    top_score: float            # max threat probability (used for zone assignment)
+    top_score: float            # highest probability across all labels (including benign)
+    threat_score: float         # max non-benign probability (used for zone assignment)
 
 
 class JudgeResult(TypedDict):

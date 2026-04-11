@@ -111,7 +111,7 @@ class TestTerminalNodeMetrics:
             classifier=_mock_classifier("benign", 0.9),
             judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
         )
-        state = {**_make_state("hello"), "zone": "CLEAN", "classification": {"label": "benign", "top_score": 0.9}}
+        state = {**_make_state("hello"), "zone": "CLEAN", "classification": {"label": "benign", "top_score": 0.9, "threat_score": 0.1}}
         before = _metric_value("firewall_requests_total", {"zone": "CLEAN", "final_decision": "PASS"})
         nodes_mod.execute_node(state)
         after = _metric_value("firewall_requests_total", {"zone": "CLEAN", "final_decision": "PASS"})
@@ -122,7 +122,7 @@ class TestTerminalNodeMetrics:
             classifier=_mock_classifier("injection", 0.95),
             judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
         )
-        state = {**_make_state("bad"), "zone": "BLOCK", "classification": {"label": "injection", "top_score": 0.95}}
+        state = {**_make_state("bad"), "zone": "BLOCK", "classification": {"label": "injection", "top_score": 0.95, "threat_score": 0.95}}
         before = _metric_value("firewall_requests_total", {"zone": "BLOCK", "final_decision": "BLOCK"})
         nodes_mod.log_node(state)
         after = _metric_value("firewall_requests_total", {"zone": "BLOCK", "final_decision": "BLOCK"})

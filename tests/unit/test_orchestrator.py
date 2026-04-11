@@ -186,7 +186,8 @@ class TestLogNode:
         state = {
             **_make_state("ambiguous prompt"),
             "classification": {"label": "jailbreak", "label_id": 2,
-                               "scores": {"jailbreak": 0.55}, "top_score": 0.55},
+                               "scores": {"jailbreak": 0.55}, "top_score": 0.55,
+                               "threat_score": 0.55},
             "zone": "GRAY",
             "judge_result": {"decision": "BLOCK", "reasoning": "confirmed threat",
                              "confidence": 0.9},

@@ -71,10 +71,11 @@ def classify_node(state: FirewallState) -> dict[str, Any]:
 
     return {
         "classification": {
-            "label":     top_label,
-            "label_id":  label2id[top_label],
-            "scores":    scores,
-            "top_score": top_score,
+            "label":        top_label,
+            "label_id":     label2id[top_label],
+            "scores":       scores,
+            "top_score":    top_score,
+            "threat_score": threat_score,
         },
         "zone": zone,
     }
@@ -106,8 +107,8 @@ def execute_node(state: FirewallState) -> dict[str, Any]:
     """Finalise a PASS decision."""
     clf: dict[str, Any] = dict(state.get("classification") or {})
     label = clf.get("label", "unknown")
-    score = clf.get("top_score", 0.0)
-    explanation = f"Prompt classified as '{label}' (score {score:.2f}) — below block threshold. PASS."
+    score = clf.get("threat_score", 0.0)
+    explanation = f"Prompt classified as '{label}' (threat_score {score:.2f}) — below block threshold. PASS."
     requests_total.labels(zone=state.get("zone", "unknown"), final_decision="PASS").inc()
     return {"final_decision": "PASS", "explanation": explanation}
 
@@ -123,8 +124,8 @@ def log_node(state: FirewallState) -> dict[str, Any]:
         )
     else:
         label = clf.get("label", "unknown")
-        score = clf.get("top_score", 0.0)
-        explanation = f"Prompt classified as '{label}' (score {score:.2f}) — above block threshold. BLOCK."
+        score = clf.get("threat_score", 0.0)
+        explanation = f"Prompt classified as '{label}' (threat_score {score:.2f}) — above block threshold. BLOCK."
 
     log_entry: dict[str, Any] = {
         "timestamp":    datetime.now(UTC).isoformat(),
@@ -132,6 +133,7 @@ def log_node(state: FirewallState) -> dict[str, Any]:
         "zone":         state.get("zone"),
         "label":        clf.get("label"),
         "top_score":    clf.get("top_score"),
+        "threat_score": clf.get("threat_score"),
         "judge_result": judge_result,
         "explanation":  explanation,
     }

@@ -13,7 +13,7 @@ from firewall.api.schemas import AnalysisRequest, ClassificationScore
 def _graph_result(decision: str, zone: str, label: str, score: float, judge: bool) -> dict:
     return {
         "prompt":           "test prompt",
-        "classification":   {"label": label, "label_id": 0, "scores": {label: score}, "top_score": score},
+        "classification":   {"label": label, "label_id": 0, "scores": {label: score}, "top_score": score, "threat_score": score},
         "zone":             zone,
         "judge_result":     {"decision": decision, "reasoning": "ok", "confidence": 0.9} if judge else None,
         "final_decision":   decision,
