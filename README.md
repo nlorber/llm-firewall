@@ -64,6 +64,16 @@ flowchart LR
 | Val accuracy | 0.9895 |
 | Val F1 macro | 0.9877 |
 
+### Per-Class Performance
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| benign | 0.9804 | 1.0000 | 0.9901 | 52 |
+| injection | 1.0000 | 1.0000 | 1.0000 | 48 |
+| jailbreak | 1.0000 | 0.9667 | 0.9831 | 30 |
+| exfiltration | 1.0000 | 1.0000 | 1.0000 | 45 |
+| escalation | 1.0000 | 1.0000 | 1.0000 | 16 |
+
 ### Training Curves
 
 ![Training curves](reports/training_curves.png)
