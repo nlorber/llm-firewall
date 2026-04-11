@@ -26,7 +26,7 @@ class SHAPExplainer:
 
         def _predict_proba(texts: list[str]) -> np.ndarray[Any, np.dtype[Any]]:
             results = model.predict(list(texts))
-            return np.array([[v for v in r.values()] for r in results])
+            return np.array([list(r.values()) for r in results])
 
         self._explainer = shap.Explainer(
             _predict_proba,
@@ -42,13 +42,10 @@ class SHAPExplainer:
             ``shap_values`` (ndarray shape [n_tokens, n_classes]).
         """
         shap_values = self._explainer(texts)
-        results = []
-        for i in range(len(texts)):
-            results.append({
-                "tokens":      shap_values.data[i],
-                "shap_values": shap_values.values[i],
-            })
-        return results
+        return [
+            {"tokens": shap_values.data[i], "shap_values": shap_values.values[i]}
+            for i in range(len(texts))
+        ]
 
 
 def plot_attention_heatmap(
