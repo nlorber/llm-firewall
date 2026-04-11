@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from firewall.classifier.dataset import NUM_LABELS
+from firewall.classifier.dataset import DEFAULT_MAX_LENGTH, NUM_LABELS
 
 
 class FirewallClassifier:
@@ -16,7 +16,7 @@ class FirewallClassifier:
         model_name_or_path: str,
         num_labels: int = NUM_LABELS,
         device: str | None = None,
-        max_length: int = 512,
+        max_length: int = DEFAULT_MAX_LENGTH,
     ) -> None:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.max_length = max_length

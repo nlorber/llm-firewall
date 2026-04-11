@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 LABEL_NAMES: list[str] = ["benign", "injection", "jailbreak", "exfiltration", "escalation"]
 NUM_LABELS: int = len(LABEL_NAMES)
 LABEL2ID: dict[str, int] = {lbl: i for i, lbl in enumerate(LABEL_NAMES)}
+DEFAULT_MAX_LENGTH: int = 512
 
 
 class FirewallDataset(Dataset[dict[str, torch.Tensor]]):
@@ -27,7 +28,7 @@ class FirewallDataset(Dataset[dict[str, torch.Tensor]]):
         texts: list[str],
         labels: list[int] | None = None,
         tokenizer_name: str = "microsoft/deberta-v3-base",
-        max_length: int = 512,
+        max_length: int = DEFAULT_MAX_LENGTH,
     ) -> None:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)  # type: ignore[no-untyped-call]
         encoding = tokenizer(
@@ -79,7 +80,7 @@ def create_dataloaders(
     test_path: Path,
     tokenizer_name: str,
     batch_size: int,
-    max_length: int = 512,
+    max_length: int = DEFAULT_MAX_LENGTH,
 ) -> tuple[DataLoader[dict[str, torch.Tensor]], DataLoader[dict[str, torch.Tensor]], DataLoader[dict[str, torch.Tensor]]]:
     """Build DataLoaders from processed JSONL splits."""
 
