@@ -21,7 +21,7 @@ _SAVE_DPI = 150
 class SHAPExplainer:
     """Token-level SHAP attributions for the firewall classifier."""
 
-    def __init__(self, model: Any, max_evals: int = _DEFAULT_MAX_EVALS) -> None:
+    def __init__(self, model: FirewallClassifier, max_evals: int = _DEFAULT_MAX_EVALS) -> None:
         self._model = model
 
         def _predict_proba(texts: list[str]) -> np.ndarray[Any, np.dtype[Any]]:

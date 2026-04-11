@@ -93,6 +93,14 @@ class TestHealthEndpoint:
         response = test_client.get("/health")
         assert response.json()["status"] == "ok"
 
+    def test_health_model_loaded_false_before_startup(self, client) -> None:
+        test_client, _ = client
+        if hasattr(test_client.app.state, "model_loaded"):
+            del test_client.app.state.model_loaded
+        response = test_client.get("/health")
+        assert response.status_code == 200
+        assert response.json()["model_loaded"] is False
+
 
 class TestSchemaValidation:
     def test_prompt_min_length_rejects_empty(self) -> None:

@@ -26,11 +26,14 @@ from firewall.judge.judge import LLMJudge
 from firewall.orchestrator.graph import build_graph
 from firewall.orchestrator.metrics import REGISTRY
 
+_SERVING_CONFIG_PATH = Path("configs/serving.yaml")
+_ORCHESTRATOR_CONFIG_PATH = Path("configs/orchestrator.yaml")
+
 
 def _load_config() -> dict[str, Any]:
     """Load orchestrator + serving config. Separated for easy mocking in tests."""
-    serving = yaml.safe_load(Path("configs/serving.yaml").read_text())
-    orch    = yaml.safe_load(Path("configs/orchestrator.yaml").read_text())
+    serving = yaml.safe_load(_SERVING_CONFIG_PATH.read_text())
+    orch    = yaml.safe_load(_ORCHESTRATOR_CONFIG_PATH.read_text())
     return {
         "model_path":       os.environ.get("MODEL_PATH", serving["model_path"]),
         "max_length":       serving["max_length"],
@@ -121,7 +124,7 @@ def main() -> None:
     """Start uvicorn programmatically (reads serving config)."""
     import uvicorn
 
-    config = yaml.safe_load(Path("configs/serving.yaml").read_text())
+    config = yaml.safe_load(_SERVING_CONFIG_PATH.read_text())
     uvicorn.run(
         "firewall.api.app:app",
         host=config["host"],

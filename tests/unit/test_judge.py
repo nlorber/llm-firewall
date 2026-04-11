@@ -61,3 +61,9 @@ class TestLLMJudge:
             judge.judge("x", "injection", {"injection": 0.5})
 
         assert judge._client.messages.create.call_count == 3
+
+    def test_confidence_outside_valid_range_is_passed_through(self, judge: LLMJudge) -> None:
+        payload = json.dumps({"decision": "BLOCK", "reasoning": "test", "confidence": 1.5})
+        judge._client.messages.create.return_value = _mock_anthropic_response(payload)
+        result = judge.judge("test", "injection", {"injection": 0.5})
+        assert result.confidence == pytest.approx(1.5)

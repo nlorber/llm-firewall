@@ -5,11 +5,11 @@ import json
 from typing import TYPE_CHECKING
 
 import torch
+from torch.utils.data import DataLoader, Dataset
+from transformers import AutoTokenizer
 
 if TYPE_CHECKING:
     from pathlib import Path
-from torch.utils.data import DataLoader, Dataset
-from transformers import AutoTokenizer
 
 LABEL_NAMES: list[str] = ["benign", "injection", "jailbreak", "exfiltration", "escalation"]
 NUM_LABELS: int = len(LABEL_NAMES)
