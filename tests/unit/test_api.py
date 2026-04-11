@@ -73,6 +73,13 @@ class TestAnalyzeEndpoint:
         response = test_client.post("/analyze", json={"prompt": "maybe bad"})
         assert response.json()["judge_invoked"] is True
 
+    def test_graph_invoke_error_returns_sanitized_500(self, client) -> None:
+        test_client, mock_graph = client
+        mock_graph.invoke.side_effect = ValueError("all retries exhausted")
+        response = test_client.post("/analyze", json={"prompt": "trigger error"})
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Internal processing error"
+        assert "retries" not in response.text
 
 
 class TestHealthEndpoint:

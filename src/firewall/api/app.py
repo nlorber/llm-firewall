@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 import yaml
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from prometheus_client import generate_latest
 from starlette.responses import Response
 
@@ -25,6 +26,8 @@ from firewall.classifier.model import load_classifier
 from firewall.judge.judge import LLMJudge
 from firewall.orchestrator.graph import build_graph
 from firewall.orchestrator.metrics import REGISTRY
+
+logger = logging.getLogger(__name__)
 
 _SERVING_CONFIG_PATH = Path("configs/serving.yaml")
 _ORCHESTRATOR_CONFIG_PATH = Path("configs/orchestrator.yaml")
@@ -84,7 +87,11 @@ def create_app() -> FastAPI:
             "explanation":    None,
             "logs":           [],
         }
-        result = await asyncio.to_thread(app.state.graph.invoke, initial_state)
+        try:
+            result = await asyncio.to_thread(app.state.graph.invoke, initial_state)
+        except Exception:
+            logger.exception("graph.invoke failed for prompt of length %d", len(request.prompt))
+            raise HTTPException(status_code=500, detail="Internal processing error") from None
         clf = result["classification"]
         scores = [
             ClassificationScore(label=k, score=v)
