@@ -62,6 +62,14 @@ class TestLLMJudge:
 
         assert judge._client.messages.create.call_count == 3
 
+    def test_code_fence_wrapped_json_is_parsed(self, judge: LLMJudge) -> None:
+        payload = '```json\n{"decision": "PASS", "reasoning": "safe", "confidence": 0.85}\n```'
+        judge._client.messages.create.return_value = _mock_anthropic_response(payload)
+
+        result = judge.judge("hello", "benign", {"benign": 0.45})
+        assert result.decision == "PASS"
+        assert result.confidence == pytest.approx(0.85)
+
     def test_confidence_outside_valid_range_is_passed_through(self, judge: LLMJudge) -> None:
         payload = json.dumps({"decision": "BLOCK", "reasoning": "test", "confidence": 1.5})
         judge._client.messages.create.return_value = _mock_anthropic_response(payload)

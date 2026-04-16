@@ -29,7 +29,7 @@ The hybrid approach cuts cost by **80–90%** and reduces p50 latency from ~500m
 
 ### Why not fine-tune to avoid the LLM entirely?
 
-Adversarial prompt engineering evolves faster than any fixed classifier can adapt. The LLM judge acts as a safety net for novel attack patterns that fall outside the classifier's training distribution. This is the same pattern used in production content moderation: fast model for clear-cut cases, expensive model for edge cases.
+Adversarial prompt engineering evolves faster than any fixed classifier can adapt. The LLM judge acts as a safety net for novel attack patterns that fall outside the classifier's training distribution. This is the same pattern used in production content moderation: fast model for clear-cut cases, lightweight LLM for edge cases. Haiku 4.5 handles this well — the task is a constrained binary decision with structured JSON output, not open-ended reasoning.
 
 ---
 

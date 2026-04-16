@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 
 import anthropic
@@ -22,7 +23,9 @@ class JudgeVerdict:
     confidence: float
 
 
-_DEFAULT_MODEL = "claude-sonnet-4-20250514"
+_CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?\s*```$", re.DOTALL)
+
+_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 _DEFAULT_MAX_TOKENS = 512
 _DEFAULT_RETRY_COUNT = 2
 
@@ -71,7 +74,9 @@ class LLMJudge:
             try:
                 block = response.content[0]
                 raw = block.text.strip()  # type: ignore[union-attr]  # we only send text prompts; first block is always TextBlock
-                data = json.loads(raw)
+                fence_match = _CODE_FENCE_RE.match(raw)
+                cleaned = fence_match.group(1).strip() if fence_match else raw
+                data = json.loads(cleaned)
                 return JudgeVerdict(
                     decision=data["decision"],
                     reasoning=data["reasoning"],

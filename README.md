@@ -282,7 +282,7 @@ Key metrics:
 |---|---|---|
 | `clean_threshold` | `0.3` | Below this → CLEAN zone (pass immediately) |
 | `block_threshold` | `0.8` | At or above this → BLOCK zone (block immediately) |
-| `judge_model` | `claude-sonnet-4-20250514` | Claude model for the LLM judge |
+| `judge_model` | `claude-haiku-4-5-20251001` | Claude model for the LLM judge |
 | `judge_max_tokens` | `512` | Max tokens for judge response |
 | `retry_count` | `2` | JSON parse retries for judge |
 
