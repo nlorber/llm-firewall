@@ -13,9 +13,9 @@ train:
 evaluate:
 	uv run python -m firewall.classifier.evaluate --config configs/training.yaml
 
-## Start the FastAPI inference server (available after Phase 5)
+## Start the FastAPI inference server (reads host/port/log_level from configs/serving.yaml)
 serve:
-	uv run uvicorn firewall.api.app:app --host 0.0.0.0 --port 8000 --reload
+	uv run firewall-serve
 
 ## Run the full test suite with coverage
 test:

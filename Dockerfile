@@ -29,4 +29,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Inject the path to the fine-tuned checkpoint at runtime
 ENV MODEL_PATH=/app/models/classifier
 
-CMD ["uvicorn", "firewall.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["firewall-serve"]
