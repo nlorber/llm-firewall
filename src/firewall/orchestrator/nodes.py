@@ -45,7 +45,8 @@ def init_nodes(
 
 def classify_node(state: FirewallState) -> dict[str, Any]:
     """Run classifier and assign zone."""
-    assert _classifier is not None, "call init_nodes() before using the graph"
+    if _classifier is None:
+        raise RuntimeError("call init_nodes() before using the graph")
     start = time.perf_counter()
     results = _classifier.predict([state["prompt"]])
     elapsed = time.perf_counter() - start
@@ -80,9 +81,11 @@ def classify_node(state: FirewallState) -> dict[str, Any]:
 
 def judge_node(state: FirewallState) -> dict[str, Any]:
     """Invoke LLM judge for GRAY zone prompts."""
-    assert _judge is not None, "call init_nodes() before using the graph"
+    if _judge is None:
+        raise RuntimeError("call init_nodes() before using the graph")
     clf = state["classification"]
-    assert clf is not None, "classify_node must run before judge_node"
+    if clf is None:
+        raise RuntimeError("classify_node must run before judge_node")
     start = time.perf_counter()
     verdict = _judge.judge(
         prompt=state["prompt"],
@@ -157,6 +160,7 @@ def route_after_classify(state: FirewallState) -> str:
 def route_after_judge(state: FirewallState) -> str:
     """Map judge decision to next node."""
     judge_result = state["judge_result"]
-    assert judge_result is not None, "judge_node must run before route_after_judge"
+    if judge_result is None:
+        raise RuntimeError("judge_node must run before route_after_judge")
     decision = judge_result["decision"]
     return "execute_node" if decision == "PASS" else "log_node"
