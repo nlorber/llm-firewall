@@ -44,6 +44,7 @@ def _load_config() -> dict[str, Any]:
         "block_threshold":  orch["block_threshold"],
         "judge_model":      orch["judge_model"],
         "judge_max_tokens": orch["judge_max_tokens"],
+        "judge_timeout":    orch["judge_timeout"],
         "retry_count":      orch["retry_count"],
     }
 
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
             model=config["judge_model"],
             max_tokens=config["judge_max_tokens"],
             retry_count=config["retry_count"],
+            timeout=config["judge_timeout"],
         )
         app.state.graph = build_graph(
             classifier,

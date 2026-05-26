@@ -4,9 +4,17 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import anthropic
 import pytest
 
 from firewall.judge.judge import JudgeVerdict, LLMJudge
+
+
+class _MockAPIError(anthropic.APIError):
+    """Constructable APIError for use as a mock side_effect."""
+
+    def __init__(self, message: str = "mock api error") -> None:
+        Exception.__init__(self, message)
 
 
 def _mock_anthropic_response(content: str) -> MagicMock:
@@ -57,7 +65,7 @@ class TestLLMJudge:
     def test_raises_value_error_after_all_retries_exhausted(self, judge: LLMJudge) -> None:
         judge._client.messages.create.return_value = _mock_anthropic_response("NOT_JSON")
 
-        with pytest.raises(ValueError, match="failed to parse judge response"):
+        with pytest.raises(ValueError, match="failed to obtain judge verdict"):
             judge.judge("x", "injection", {"injection": 0.5})
 
         assert judge._client.messages.create.call_count == 3
@@ -75,3 +83,32 @@ class TestLLMJudge:
         judge._client.messages.create.return_value = _mock_anthropic_response(payload)
         result = judge.judge("test", "injection", {"injection": 0.5})
         assert result.confidence == pytest.approx(1.5)
+
+    def test_api_error_triggers_retry(self, judge: LLMJudge) -> None:
+        good_payload = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})
+        judge._client.messages.create.side_effect = [
+            _MockAPIError("transient"),
+            _mock_anthropic_response(good_payload),
+        ]
+        result = judge.judge("hello", "benign", {"benign": 0.45})
+        assert result.decision == "PASS"
+        assert judge._client.messages.create.call_count == 2
+
+    def test_all_api_errors_raise_after_retries_exhausted(self, judge: LLMJudge) -> None:
+        judge._client.messages.create.side_effect = _MockAPIError("down")
+
+        with pytest.raises(ValueError, match="failed to obtain judge verdict"):
+            judge.judge("x", "injection", {"injection": 0.5})
+
+        assert judge._client.messages.create.call_count == 3
+
+    def test_timeout_is_passed_to_api_call(self) -> None:
+        with patch("firewall.judge.judge.anthropic.Anthropic"):
+            judge = LLMJudge(timeout=7.5)
+        payload = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})
+        judge._client.messages.create.return_value = _mock_anthropic_response(payload)
+
+        judge.judge("hello", "benign", {"benign": 0.45})
+
+        kwargs = judge._client.messages.create.call_args.kwargs
+        assert kwargs.get("timeout") == 7.5

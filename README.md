@@ -284,7 +284,8 @@ Key metrics:
 | `block_threshold` | `0.8` | At or above this → BLOCK zone (block immediately) |
 | `judge_model` | `claude-haiku-4-5-20251001` | Claude model for the LLM judge |
 | `judge_max_tokens` | `512` | Max tokens for judge response |
-| `retry_count` | `2` | JSON parse retries for judge |
+| `judge_timeout` | `10.0` | Per-call timeout in seconds for the judge API request |
+| `retry_count` | `2` | Retries on API or JSON parse errors |
 
 ### Environment Variables
 

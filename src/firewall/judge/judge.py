@@ -28,6 +28,7 @@ _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?\s*```$", re.DOTALL)
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 _DEFAULT_MAX_TOKENS = 512
 _DEFAULT_RETRY_COUNT = 2
+_DEFAULT_TIMEOUT_SECONDS = 10.0
 
 
 class LLMJudge:
@@ -38,10 +39,12 @@ class LLMJudge:
         model: str = _DEFAULT_MODEL,
         max_tokens: int = _DEFAULT_MAX_TOKENS,
         retry_count: int = _DEFAULT_RETRY_COUNT,
+        timeout: float = _DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         self._model = model
         self._max_tokens = max_tokens
         self._retry_count = retry_count
+        self._timeout = timeout
         self._client = anthropic.Anthropic()
 
     def judge(
@@ -53,7 +56,7 @@ class LLMJudge:
         """Ask Claude whether a GRAY zone prompt should be blocked.
 
         Raises:
-            ValueError: If all retries produce unparseable JSON.
+            ValueError: If all retries fail (API or parse errors).
         """
         scores_str = ", ".join(f"{k}={v:.2f}" for k, v in sorted(scores.items()))
         user_message = (
@@ -65,13 +68,14 @@ class LLMJudge:
         last_exc: Exception | None = None
         raw: str = ""
         for _attempt in range(self._retry_count + 1):
-            response = self._client.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_message}],
-            )
             try:
+                response = self._client.messages.create(
+                    model=self._model,
+                    max_tokens=self._max_tokens,
+                    system=_SYSTEM_PROMPT,
+                    messages=[{"role": "user", "content": user_message}],
+                    timeout=self._timeout,
+                )
                 block = response.content[0]
                 raw = block.text.strip()  # type: ignore[union-attr]  # we only send text prompts; first block is always TextBlock
                 fence_match = _CODE_FENCE_RE.match(raw)
@@ -82,10 +86,17 @@ class LLMJudge:
                     reasoning=data["reasoning"],
                     confidence=float(data["confidence"]),
                 )
-            except (json.JSONDecodeError, KeyError, ValueError, IndexError, AttributeError) as exc:
+            except (
+                anthropic.APIError,
+                json.JSONDecodeError,
+                KeyError,
+                ValueError,
+                IndexError,
+                AttributeError,
+            ) as exc:
                 last_exc = exc
 
         raise ValueError(
-            f"failed to parse judge response after {self._retry_count + 1} attempts. "
+            f"failed to obtain judge verdict after {self._retry_count + 1} attempts. "
             f"Last response: {raw!r}. Last error: {last_exc}"
         )
