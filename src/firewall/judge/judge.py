@@ -81,8 +81,11 @@ class LLMJudge:
                 fence_match = _CODE_FENCE_RE.match(raw)
                 cleaned = fence_match.group(1).strip() if fence_match else raw
                 data = json.loads(cleaned)
+                decision = data["decision"]
+                if decision not in {"PASS", "BLOCK"}:
+                    raise ValueError(f"unexpected judge decision: {decision!r}")
                 return JudgeVerdict(
-                    decision=data["decision"],
+                    decision=decision,
                     reasoning=data["reasoning"],
                     confidence=float(data["confidence"]),
                 )
