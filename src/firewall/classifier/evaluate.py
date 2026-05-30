@@ -63,6 +63,106 @@ def evaluate(
     }
 
 
+def threat_score(scores: dict[str, float]) -> float:
+    """Max probability across non-benign classes — mirrors the orchestrator's routing."""
+    return max((v for k, v in scores.items() if k != "benign"), default=0.0)
+
+
+def compute_robustness_metrics(
+    predictions: list[dict[str, float]],
+    true_labels: list[str],
+    attack_types: list[str],
+    clean_threshold: float,
+    block_threshold: float,
+) -> dict[str, Any]:
+    """Aggregate out-of-distribution detection metrics for an all-threat eval set.
+
+    The set contains only attack prompts (no benign examples), so this measures
+    *recall* on novel attacks — the rate at which the firewall refuses to wave a
+    prompt straight through as CLEAN — not precision or false-positive rate.
+
+    - ``detection_rate``: fraction with ``threat_score >= clean_threshold`` (routed
+      to the judge or blocked rather than passed as CLEAN).
+    - ``block_rate``: fraction with ``threat_score >= block_threshold`` (hard-blocked
+      by the classifier alone, no judge needed).
+    - ``exact_class_accuracy``: fraction whose top predicted label equals the true
+      attack class — much stricter than detection.
+    """
+    n = len(predictions)
+    if n == 0:
+        raise ValueError("no predictions to evaluate")
+
+    detected = blocked = exact = 0
+    per_type: dict[str, dict[str, int]] = {}
+    for scores, true_label, atk in zip(predictions, true_labels, attack_types, strict=True):
+        ts = threat_score(scores)
+        top_label = max(scores, key=scores.__getitem__)
+        is_detected = ts >= clean_threshold
+        is_blocked = ts >= block_threshold
+        is_exact = top_label == true_label
+
+        detected += int(is_detected)
+        blocked += int(is_blocked)
+        exact += int(is_exact)
+
+        bucket = per_type.setdefault(atk, {"n": 0, "detected": 0, "blocked": 0, "exact": 0})
+        bucket["n"] += 1
+        bucket["detected"] += int(is_detected)
+        bucket["blocked"] += int(is_blocked)
+        bucket["exact"] += int(is_exact)
+
+    return {
+        "n":                    n,
+        "detection_rate":       detected / n,
+        "block_rate":           blocked / n,
+        "exact_class_accuracy": exact / n,
+        "per_attack_type":      per_type,
+    }
+
+
+def evaluate_robustness(
+    model_path: str | Path,
+    data_path: str | Path,
+    clean_threshold: float,
+    block_threshold: float,
+    batch_size: int = _DEFAULT_EVAL_BATCH_SIZE,
+) -> dict[str, Any]:
+    """Evaluate the classifier on a held-out, all-threat OOD set.
+
+    Each line is ``{"text", "label", "attack_type"}``. Benign labels are rejected:
+    this set exists to measure detection recall on novel attacks, not FPR.
+    """
+    clf = load_classifier(model_path)
+
+    texts: list[str] = []
+    true_labels: list[str] = []
+    attack_types: list[str] = []
+    path = Path(data_path)
+    with path.open() as f:
+        for lineno, line in enumerate(f, 1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            r = json.loads(stripped)
+            label = r["label"]
+            if label not in LABEL2ID:
+                raise ValueError(f"Unknown label {label!r} at line {lineno} in {path}")
+            if label == "benign":
+                msg = f"robustness set must contain only threats; got benign at line {lineno}"
+                raise ValueError(msg)
+            texts.append(r["text"])
+            true_labels.append(label)
+            attack_types.append(r.get("attack_type", "unknown"))
+
+    predictions: list[dict[str, float]] = []
+    for i in range(0, len(texts), batch_size):
+        predictions.extend(clf.predict(texts[i : i + batch_size]))
+
+    return compute_robustness_metrics(
+        predictions, true_labels, attack_types, clean_threshold, block_threshold
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate the fine-tuned classifier")
     parser.add_argument("--config", required=True, type=Path)
@@ -78,6 +178,34 @@ def main() -> None:
     logger.info("F1 macro:    %.4f", results["f1_macro"])
     logger.info("F1 weighted: %.4f", results["f1_weighted"])
     logger.info("Classification report:\n%s", results["classification_report"])
+
+
+def robustness_main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Evaluate OOD detection recall on a held-out attack set"
+    )
+    parser.add_argument("--model-path", required=True, type=Path)
+    parser.add_argument("--data-path", required=True, type=Path)
+    parser.add_argument("--clean-threshold", type=float, default=0.3)
+    parser.add_argument("--block-threshold", type=float, default=0.8)
+    args = parser.parse_args()
+
+    results = evaluate_robustness(
+        model_path=args.model_path,
+        data_path=args.data_path,
+        clean_threshold=args.clean_threshold,
+        block_threshold=args.block_threshold,
+    )
+    logger.info("OOD set size:            %d", results["n"])
+    logger.info("Detection rate (recall): %.4f", results["detection_rate"])
+    logger.info("Block rate:              %.4f", results["block_rate"])
+    logger.info("Exact-class accuracy:    %.4f", results["exact_class_accuracy"])
+    logger.info("Per attack type:")
+    for atk, b in sorted(results["per_attack_type"].items()):
+        logger.info(
+            "  %-22s n=%d detected=%d blocked=%d exact=%d",
+            atk, b["n"], b["detected"], b["blocked"], b["exact"],
+        )
 
 
 if __name__ == "__main__":

@@ -299,6 +299,139 @@ class TestEvaluateMain:
             main()
 
 
+class TestRobustnessMetrics:
+    @staticmethod
+    def _scores(**kw: float) -> dict[str, float]:
+        base = {
+            "benign": 0.0, "injection": 0.0, "jailbreak": 0.0,
+            "exfiltration": 0.0, "escalation": 0.0,
+        }
+        base.update(kw)
+        return base
+
+    def test_threat_score_ignores_benign(self) -> None:
+        from firewall.classifier.evaluate import threat_score
+
+        scores = self._scores(benign=0.7, injection=0.2, jailbreak=0.1)
+        assert threat_score(scores) == pytest.approx(0.2)
+
+    def test_detection_rate_counts_non_clean(self) -> None:
+        from firewall.classifier.evaluate import compute_robustness_metrics
+
+        # One attack caught (threat_score 0.9 >= 0.3), one missed (0.05 < 0.3).
+        preds = [self._scores(benign=0.1, injection=0.9), self._scores(benign=0.95, injection=0.05)]
+        result = compute_robustness_metrics(
+            preds, ["injection", "injection"], ["base64", "roleplay"],
+            clean_threshold=0.3, block_threshold=0.8,
+        )
+        assert result["n"] == 2
+        assert result["detection_rate"] == pytest.approx(0.5)
+
+    def test_block_rate_uses_block_threshold(self) -> None:
+        from firewall.classifier.evaluate import compute_robustness_metrics
+
+        # Both detected (>= 0.3) but only one hard-blocked (>= 0.8).
+        preds = [self._scores(injection=0.9), self._scores(injection=0.5)]
+        result = compute_robustness_metrics(
+            preds, ["injection", "injection"], ["a", "b"],
+            clean_threshold=0.3, block_threshold=0.8,
+        )
+        assert result["detection_rate"] == pytest.approx(1.0)
+        assert result["block_rate"] == pytest.approx(0.5)
+
+    def test_exact_class_accuracy(self) -> None:
+        from firewall.classifier.evaluate import compute_robustness_metrics
+
+        # First top-label matches true label, second does not.
+        preds = [self._scores(injection=0.9), self._scores(jailbreak=0.9)]
+        result = compute_robustness_metrics(
+            preds, ["injection", "injection"], ["a", "b"],
+            clean_threshold=0.3, block_threshold=0.8,
+        )
+        assert result["exact_class_accuracy"] == pytest.approx(0.5)
+
+    def test_per_attack_type_breakdown(self) -> None:
+        from firewall.classifier.evaluate import compute_robustness_metrics
+
+        preds = [self._scores(injection=0.9), self._scores(benign=0.99, injection=0.01)]
+        result = compute_robustness_metrics(
+            preds, ["injection", "injection"], ["base64", "base64"],
+            clean_threshold=0.3, block_threshold=0.8,
+        )
+        bucket = result["per_attack_type"]["base64"]
+        assert bucket["n"] == 2
+        assert bucket["detected"] == 1
+
+    def test_empty_predictions_raises(self) -> None:
+        from firewall.classifier.evaluate import compute_robustness_metrics
+
+        with pytest.raises(ValueError, match="no predictions"):
+            compute_robustness_metrics([], [], [], clean_threshold=0.3, block_threshold=0.8)
+
+
+class TestEvaluateRobustness:
+    def test_reads_set_and_returns_metrics(self, tmp_path: Any) -> None:
+        from firewall.classifier.evaluate import evaluate_robustness
+
+        mock_clf = MagicMock()
+        mock_clf.predict.return_value = [
+            {"benign": 0.1, "injection": 0.9, "jailbreak": 0.0,
+             "exfiltration": 0.0, "escalation": 0.0}
+        ]
+        data = tmp_path / "adv.jsonl"
+        data.write_text('{"text": "x", "label": "injection", "attack_type": "base64"}\n')
+
+        with patch("firewall.classifier.evaluate.load_classifier", return_value=mock_clf):
+            result = evaluate_robustness(
+                model_path="dummy", data_path=data,
+                clean_threshold=0.3, block_threshold=0.8,
+            )
+        assert result["n"] == 1
+        assert result["detection_rate"] == pytest.approx(1.0)
+
+    def test_rejects_benign_label(self, tmp_path: Any) -> None:
+        from firewall.classifier.evaluate import evaluate_robustness
+
+        mock_clf = MagicMock()
+        data = tmp_path / "adv.jsonl"
+        data.write_text('{"text": "hi", "label": "benign", "attack_type": "none"}\n')
+
+        with patch("firewall.classifier.evaluate.load_classifier", return_value=mock_clf), \
+             pytest.raises(ValueError, match="only threats"):
+            evaluate_robustness(
+                model_path="dummy", data_path=data,
+                clean_threshold=0.3, block_threshold=0.8,
+            )
+
+
+class TestRobustnessMain:
+    def test_main_parses_args_and_logs_results(self, tmp_path: Any) -> None:
+        from firewall.classifier.evaluate import robustness_main
+
+        data_path = tmp_path / "adv.jsonl"
+        data_path.write_text('{"text": "x", "label": "injection", "attack_type": "base64"}\n')
+
+        mock_results = {
+            "n": 1,
+            "detection_rate": 1.0,
+            "block_rate": 1.0,
+            "exact_class_accuracy": 1.0,
+            "per_attack_type": {"base64": {"n": 1, "detected": 1, "blocked": 1, "exact": 1}},
+        }
+        argv = [
+            "robustness", "--model-path", "dummy/model",
+            "--data-path", str(data_path),
+        ]
+        with patch(
+            "firewall.classifier.evaluate.evaluate_robustness", return_value=mock_results
+        ) as mock_eval, patch("sys.argv", argv):
+            robustness_main()
+
+        mock_eval.assert_called_once()
+        assert mock_eval.call_args.kwargs["clean_threshold"] == 0.3
+        assert mock_eval.call_args.kwargs["block_threshold"] == 0.8
+
+
 class TestSHAPExplainer:
     def test_explain_returns_list_with_expected_keys(self) -> None:
         from firewall.classifier.explain import SHAPExplainer

@@ -54,9 +54,10 @@ dev = [
 ]
 
 [project.scripts]
-firewall-train    = "firewall.classifier.train:main"
-firewall-evaluate = "firewall.classifier.evaluate:main"
-firewall-serve    = "firewall.api.app:main"
+firewall-train      = "firewall.classifier.train:main"
+firewall-evaluate   = "firewall.classifier.evaluate:main"
+firewall-robustness = "firewall.classifier.evaluate:robustness_main"
+firewall-serve      = "firewall.api.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

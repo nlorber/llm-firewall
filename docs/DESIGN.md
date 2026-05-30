@@ -188,3 +188,12 @@ The slowness (~2–5 seconds per explanation with `max_evals=200`) is acceptable
 ### Why F1 macro over weighted
 
 For a security classifier, a model that perfectly detects benign and injection but completely misses escalation (the rarest class) would score well on F1 weighted but poorly on F1 macro. F1 macro treats all classes as equally important, which aligns with the security goal: every attack type must be caught.
+
+### In-distribution vs. out-of-distribution
+
+The headline F1 is measured on a test split from the same synthetic generator as training, so it is an optimistic upper bound. To separate *detection* from *exact classification* under distribution shift, the classifier is also scored on a held-out set of hand-crafted obfuscated attacks (`data/adversarial/`, run via `firewall-robustness`). Two findings drive the design narrative:
+
+- **Detection recall generalizes** — obfuscated attacks (base64, homoglyphs, payload splitting) are still flagged as threats rather than waved through as CLEAN. This is the security-critical metric.
+- **Fine-grained class labeling degrades** — exact attack-class accuracy drops sharply out-of-distribution. The model knows *that* a prompt is hostile better than *which* attack it is.
+
+This is also the strongest argument for the GRAY zone: a borderline obfuscated attack the classifier is unsure about routes to the judge instead of being silently passed.

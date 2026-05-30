@@ -57,6 +57,10 @@ flowchart LR
 
 > Run `make train` then `make evaluate` to reproduce. See `notebooks/02_training_curves.ipynb` for convergence plots.
 
+The headline numbers below are **in-distribution**: the test split is drawn from the same
+synthetic generator as training, so 99.5% is an optimistic ceiling, not a field number. See
+[Out-of-Distribution Robustness](#out-of-distribution-robustness) for held-out generalization.
+
 | Metric | Value |
 |---|---|
 | Test accuracy | 0.9948 |
@@ -73,6 +77,35 @@ flowchart LR
 | jailbreak | 1.0000 | 0.9667 | 0.9831 | 30 |
 | exfiltration | 1.0000 | 1.0000 | 1.0000 | 45 |
 | escalation | 1.0000 | 1.0000 | 1.0000 | 16 |
+
+### Out-of-Distribution Robustness
+
+To probe generalization beyond the synthetic test split, the classifier is evaluated on a
+held-out set of 20 hand-crafted **obfuscated** attacks (base64, unicode homoglyphs, payload
+splitting, multilingual, persona roleplay, …) that share no text with the training data. The
+set is all-threat, so it measures **detection recall on novel attacks**, not false-positive
+rate.
+
+| Metric (n=20, out-of-distribution) | Value |
+|---|---|
+| Detection recall — flagged, not passed as CLEAN | 1.00 |
+| Block rate — hard-blocked by the classifier alone | 0.95 |
+| Exact attack-class accuracy | 0.65 |
+
+The gap between these three is the point: **detection generalizes** — every obfuscated attack
+is caught as a threat — while **fine-grained class labeling degrades** from 99.5%
+in-distribution to 65% out-of-distribution. The model reliably knows *that* a prompt is
+hostile while often mislabeling *which* attack type (persona-roleplay is the weakest class).
+The single attack not hard-blocked lands in the GRAY zone and would be routed to the LLM
+judge — the hybrid design's intended safety net for exactly this case.
+
+Caveat: n=20 is small and the attacks are curated, so read 100% detection as "no obvious gaps
+on these techniques," not a guarantee. Reproduce with:
+
+```bash
+firewall-robustness --model-path models/classifier \
+  --data-path data/adversarial/adversarial_prompts.jsonl
+```
 
 ### Training Curves
 
