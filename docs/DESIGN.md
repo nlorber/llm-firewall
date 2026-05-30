@@ -97,6 +97,14 @@ LangGraph was chosen for two reasons:
 
 `FirewallState` is a `TypedDict` with progressive population — fields start as `None` and are set by the node that produces them. This avoids optional chaining and makes it clear which node is responsible for each field.
 
+### Failure semantics
+
+The judge can fail — API timeout, transport error, or an unparseable response. `LLMJudge.judge()` retries (configurable, default 2 retries) and raises `ValueError` once every attempt is exhausted. That exception propagates through `graph.invoke`, and the `/analyze` handler returns **HTTP 500** with no decision.
+
+This makes the firewall **fail-closed at the API contract level**: a judge outage never yields a `PASS`. Deployments must treat any non-2xx response from `/analyze` as a block — the protected system should not forward a prompt it could not obtain a verdict for. Surfacing the failure as a 5xx (rather than silently emitting a `BLOCK`) keeps judge outages visible in monitoring instead of masking infrastructure errors as security decisions; the cost is that callers must implement the "non-2xx ⇒ block" rule themselves.
+
+Only the GRAY zone (~10-20% of traffic) depends on the judge. CLEAN and BLOCK decisions are made entirely by the classifier and are unaffected by judge availability.
+
 ---
 
 ## 5. Data Pipeline

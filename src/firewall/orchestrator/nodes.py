@@ -22,7 +22,12 @@ from firewall.orchestrator.state import (
 DEFAULT_CLEAN_THRESHOLD: float = 0.3
 DEFAULT_BLOCK_THRESHOLD: float = 0.8
 
-# Module-level state — populated by init_nodes() before building the graph
+# Module-level state — populated once by init_nodes() at startup, then read-only.
+# This is process-global by design: a single firewall process serves one classifier
+# + judge, and FastAPI's lifespan calls init_nodes() exactly once before any request.
+# Because the globals are only written at init and read thereafter, concurrent request
+# handling within the process is safe. It is NOT designed for hosting multiple graphs
+# with different classifiers in one process — that would require instance-scoped state.
 _classifier: FirewallClassifier | None = None
 _judge: LLMJudge | None = None
 _clean_threshold: float = DEFAULT_CLEAN_THRESHOLD
