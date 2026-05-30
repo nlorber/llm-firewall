@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import anthropic
@@ -29,6 +30,12 @@ class TestLLMJudge:
     def judge(self) -> LLMJudge:
         with patch("firewall.judge.judge.anthropic.Anthropic"):
             return LLMJudge(model="claude-haiku-4-5-20251001", max_tokens=128, retry_count=2)
+
+    @pytest.fixture(autouse=True)
+    def mock_sleep(self) -> Any:
+        """Patch backoff sleep so retry tests don't actually wait."""
+        with patch("firewall.judge.judge.time.sleep") as m:
+            yield m
 
     def test_judge_returns_judge_verdict(self, judge: LLMJudge) -> None:
         payload = json.dumps({"decision": "BLOCK", "reasoning": "injection attempt", "confidence": 0.95})
@@ -101,6 +108,28 @@ class TestLLMJudge:
             judge.judge("x", "injection", {"injection": 0.5})
 
         assert judge._client.messages.create.call_count == 3
+
+    def test_backoff_grows_between_retries(self, judge: LLMJudge, mock_sleep: Any) -> None:
+        good = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})
+        judge._client.messages.create.side_effect = [
+            _MockAPIError("transient"),
+            _MockAPIError("transient"),
+            _mock_anthropic_response(good),
+        ]
+        result = judge.judge("hi", "benign", {"benign": 0.45})
+
+        assert result.decision == "PASS"
+        # Two failed attempts → exponential backoff: 0.5 * 2^0, then 0.5 * 2^1.
+        assert [c.args[0] for c in mock_sleep.call_args_list] == [0.5, 1.0]
+
+    def test_no_backoff_when_first_attempt_succeeds(
+        self, judge: LLMJudge, mock_sleep: Any
+    ) -> None:
+        payload = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})
+        judge._client.messages.create.return_value = _mock_anthropic_response(payload)
+
+        judge.judge("hello", "benign", {"benign": 0.45})
+        mock_sleep.assert_not_called()
 
     def test_timeout_is_passed_to_api_call(self) -> None:
         with patch("firewall.judge.judge.anthropic.Anthropic"):

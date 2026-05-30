@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass
 
 import anthropic
@@ -29,6 +30,7 @@ _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 _DEFAULT_MAX_TOKENS = 512
 _DEFAULT_RETRY_COUNT = 2
 _DEFAULT_TIMEOUT_SECONDS = 10.0
+_DEFAULT_BACKOFF_BASE_SECONDS = 0.5
 
 
 class LLMJudge:
@@ -40,11 +42,13 @@ class LLMJudge:
         max_tokens: int = _DEFAULT_MAX_TOKENS,
         retry_count: int = _DEFAULT_RETRY_COUNT,
         timeout: float = _DEFAULT_TIMEOUT_SECONDS,
+        backoff_base: float = _DEFAULT_BACKOFF_BASE_SECONDS,
     ) -> None:
         self._model = model
         self._max_tokens = max_tokens
         self._retry_count = retry_count
         self._timeout = timeout
+        self._backoff_base = backoff_base
         self._client = anthropic.Anthropic()
 
     def judge(
@@ -67,7 +71,7 @@ class LLMJudge:
 
         last_exc: Exception | None = None
         raw: str = ""
-        for _attempt in range(self._retry_count + 1):
+        for attempt in range(self._retry_count + 1):
             try:
                 response = self._client.messages.create(
                     model=self._model,
@@ -98,6 +102,11 @@ class LLMJudge:
                 AttributeError,
             ) as exc:
                 last_exc = exc
+                # Exponential backoff before the next attempt (none after the last).
+                # Deterministic for predictable latency bounds; add jitter if these
+                # judges ever fan out across many concurrent workers.
+                if attempt < self._retry_count:
+                    time.sleep(self._backoff_base * (2**attempt))
 
         raise ValueError(
             f"failed to obtain judge verdict after {self._retry_count + 1} attempts. "
