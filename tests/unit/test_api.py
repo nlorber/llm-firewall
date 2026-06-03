@@ -102,6 +102,15 @@ class TestHealthEndpoint:
         assert response.json()["model_loaded"] is False
 
 
+class TestDemoEndpoint:
+    def test_root_serves_demo_html(self, client) -> None:
+        test_client, _ = client
+        response = test_client.get("/")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+        assert "firewall" in response.text.lower()
+
+
 class TestSchemaValidation:
     def test_prompt_min_length_rejects_empty(self) -> None:
         with pytest.raises(ValidationError, match="string_too_short"):

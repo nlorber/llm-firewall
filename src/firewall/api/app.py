@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 import yaml
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 _SERVING_CONFIG_PATH = Path("configs/serving.yaml")
 _ORCHESTRATOR_CONFIG_PATH = Path("configs/orchestrator.yaml")
+_STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _load_config() -> dict[str, Any]:
@@ -77,6 +79,11 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def demo() -> HTMLResponse:
+        """Serve the self-contained interactive demo console."""
+        return HTMLResponse((_STATIC_DIR / "index.html").read_text(encoding="utf-8"))
 
     @app.post("/analyze", response_model=AnalysisResponse)
     async def analyze(request: AnalysisRequest) -> AnalysisResponse:
@@ -130,8 +137,13 @@ app = create_app()
 
 
 def main() -> None:
-    """Start uvicorn programmatically (reads serving config)."""
+    """Start uvicorn programmatically (reads serving config and .env)."""
     import uvicorn
+    from dotenv import load_dotenv
+
+    # Load .env (e.g. ANTHROPIC_API_KEY for the LLM judge) into the process environment
+    # before the app's lifespan constructs the judge client.
+    load_dotenv()
 
     config = yaml.safe_load(_SERVING_CONFIG_PATH.read_text())
     uvicorn.run(

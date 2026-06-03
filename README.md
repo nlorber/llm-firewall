@@ -173,6 +173,8 @@ make evaluate
 # 5. Serve (requires ANTHROPIC_API_KEY for the LLM judge)
 make serve
 
+# Then open http://localhost:8000 for the interactive threat console, or call the API:
+
 # 6. Analyse a prompt
 curl -X POST http://localhost:8000/analyze \
   -H "Content-Type: application/json" \

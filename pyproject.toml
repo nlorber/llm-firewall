@@ -27,6 +27,8 @@ dependencies = [
     "langgraph>=0.2,<1",
     # LLM API (judge)
     "anthropic>=0.28,<1",
+    # Config / .env loading
+    "python-dotenv>=1.0,<2",
     # API serving
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.29,<1",
