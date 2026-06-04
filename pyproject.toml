@@ -23,6 +23,7 @@ dependencies = [
     # Classical ML + explainability
     "scikit-learn>=1.4,<2",
     "shap>=0.45,<1",
+    "matplotlib>=3.8,<4",
     # Agentic orchestration
     "langgraph>=0.2,<1",
     # LLM API (judge)
