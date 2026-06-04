@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import firewall.orchestrator.nodes as nodes_mod
 from fastapi.testclient import TestClient
+
+import firewall.orchestrator.nodes as nodes_mod
 from firewall.judge.judge import JudgeVerdict
 from firewall.orchestrator.metrics import REGISTRY
 from firewall.orchestrator.state import FirewallState

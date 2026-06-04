@@ -5,8 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from firewall.api.schemas import AnalysisRequest, ClassificationScore
 from pydantic import ValidationError
+
+from firewall.api.schemas import AnalysisRequest, ClassificationScore
 
 
 def _graph_result(decision: str, zone: str, label: str, score: float, judge: bool) -> dict:
