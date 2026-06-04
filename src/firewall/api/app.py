@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
+from firewall import __version__
 from firewall.api.schemas import (
     AnalysisRequest,
     AnalysisResponse,
@@ -38,16 +39,16 @@ _STATIC_DIR = Path(__file__).parent / "static"
 def _load_config() -> dict[str, Any]:
     """Load orchestrator + serving config. Separated for easy mocking in tests."""
     serving = yaml.safe_load(_SERVING_CONFIG_PATH.read_text())
-    orch    = yaml.safe_load(_ORCHESTRATOR_CONFIG_PATH.read_text())
+    orch = yaml.safe_load(_ORCHESTRATOR_CONFIG_PATH.read_text())
     return {
-        "model_path":       os.environ.get("MODEL_PATH", serving["model_path"]),
-        "max_length":       serving["max_length"],
-        "clean_threshold":  orch["clean_threshold"],
-        "block_threshold":  orch["block_threshold"],
-        "judge_model":      orch["judge_model"],
+        "model_path": os.environ.get("MODEL_PATH", serving["model_path"]),
+        "max_length": serving["max_length"],
+        "clean_threshold": orch["clean_threshold"],
+        "block_threshold": orch["block_threshold"],
+        "judge_model": orch["judge_model"],
         "judge_max_tokens": orch["judge_max_tokens"],
-        "judge_timeout":    orch["judge_timeout"],
-        "retry_count":      orch["retry_count"],
+        "judge_timeout": orch["judge_timeout"],
+        "retry_count": orch["retry_count"],
     }
 
 
@@ -76,7 +77,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="LLM Firewall",
         description="Prompt threat classification and routing via DeBERTa + LangGraph",
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
     )
 
@@ -88,13 +89,13 @@ def create_app() -> FastAPI:
     @app.post("/analyze", response_model=AnalysisResponse)
     async def analyze(request: AnalysisRequest) -> AnalysisResponse:
         initial_state: dict[str, Any] = {
-            "prompt":         request.prompt,
+            "prompt": request.prompt,
             "classification": None,
-            "zone":           None,
-            "judge_result":   None,
+            "zone": None,
+            "judge_result": None,
             "final_decision": None,
-            "explanation":    None,
-            "logs":           [],
+            "explanation": None,
+            "logs": [],
         }
         try:
             result = await asyncio.to_thread(app.state.graph.invoke, initial_state)
@@ -102,10 +103,7 @@ def create_app() -> FastAPI:
             logger.exception("graph.invoke failed for prompt of length %d", len(request.prompt))
             raise HTTPException(status_code=500, detail="Internal processing error") from None
         clf = result["classification"]
-        scores = [
-            ClassificationScore(label=k, score=v)
-            for k, v in clf["scores"].items()
-        ]
+        scores = [ClassificationScore(label=k, score=v) for k, v in clf["scores"].items()]
         return AnalysisResponse(
             decision=result["final_decision"],
             zone=result["zone"],

@@ -3,9 +3,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from fastapi.testclient import TestClient
-
 import firewall.orchestrator.nodes as nodes_mod
+from fastapi.testclient import TestClient
 from firewall.judge.judge import JudgeVerdict
 from firewall.orchestrator.metrics import REGISTRY
 from firewall.orchestrator.state import FirewallState
@@ -52,7 +51,13 @@ def _make_state(prompt: str = "hello") -> FirewallState:
 
 def _mock_classifier(top_label: str, top_score: float) -> MagicMock:
     clf = MagicMock()
-    scores = {"benign": 0.1, "injection": 0.1, "jailbreak": 0.1, "exfiltration": 0.1, "escalation": 0.1}
+    scores = {
+        "benign": 0.1,
+        "injection": 0.1,
+        "jailbreak": 0.1,
+        "exfiltration": 0.1,
+        "escalation": 0.1,
+    }
     scores[top_label] = top_score
     clf.predict.return_value = [scores]
     return clf
@@ -67,7 +72,9 @@ class TestClassifyNodeMetrics:
     def test_classify_observes_duration_histogram(self) -> None:
         nodes_mod.init_nodes(
             classifier=_mock_classifier("benign", 0.9),
-            judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
+            judge=MagicMock(),
+            clean_threshold=0.3,
+            block_threshold=0.8,
         )
         before = _metric_value("firewall_classify_duration_seconds_count", {"zone": "CLEAN"})
         nodes_mod.classify_node(_make_state("hello"))
@@ -77,7 +84,9 @@ class TestClassifyNodeMetrics:
     def test_classify_increments_label_counter(self) -> None:
         nodes_mod.init_nodes(
             classifier=_mock_classifier("injection", 0.95),
-            judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
+            judge=MagicMock(),
+            clean_threshold=0.3,
+            block_threshold=0.8,
         )
         before = _metric_value("firewall_classification_label_total", {"label": "injection"})
         nodes_mod.classify_node(_make_state("bad"))
@@ -89,11 +98,15 @@ class TestJudgeNodeMetrics:
     def test_judge_observes_duration_histogram(self) -> None:
         mock_judge = MagicMock()
         mock_judge.judge.return_value = JudgeVerdict(
-            decision="BLOCK", reasoning="suspicious", confidence=0.85,
+            decision="BLOCK",
+            reasoning="suspicious",
+            confidence=0.85,
         )
         nodes_mod.init_nodes(
             classifier=_mock_classifier("benign", 0.1),
-            judge=mock_judge, clean_threshold=0.3, block_threshold=0.8,
+            judge=mock_judge,
+            clean_threshold=0.3,
+            block_threshold=0.8,
         )
         state = {
             **_make_state("test"),
@@ -109,23 +122,43 @@ class TestTerminalNodeMetrics:
     def test_execute_node_increments_requests_total(self) -> None:
         nodes_mod.init_nodes(
             classifier=_mock_classifier("benign", 0.9),
-            judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
+            judge=MagicMock(),
+            clean_threshold=0.3,
+            block_threshold=0.8,
         )
-        state = {**_make_state("hello"), "zone": "CLEAN", "classification": {"label": "benign", "top_score": 0.9, "threat_score": 0.1}}
-        before = _metric_value("firewall_requests_total", {"zone": "CLEAN", "final_decision": "PASS"})
+        state = {
+            **_make_state("hello"),
+            "zone": "CLEAN",
+            "classification": {"label": "benign", "top_score": 0.9, "threat_score": 0.1},
+        }
+        before = _metric_value(
+            "firewall_requests_total", {"zone": "CLEAN", "final_decision": "PASS"}
+        )
         nodes_mod.execute_node(state)
-        after = _metric_value("firewall_requests_total", {"zone": "CLEAN", "final_decision": "PASS"})
+        after = _metric_value(
+            "firewall_requests_total", {"zone": "CLEAN", "final_decision": "PASS"}
+        )
         assert after == before + 1
 
     def test_log_node_increments_requests_total(self) -> None:
         nodes_mod.init_nodes(
             classifier=_mock_classifier("injection", 0.95),
-            judge=MagicMock(), clean_threshold=0.3, block_threshold=0.8,
+            judge=MagicMock(),
+            clean_threshold=0.3,
+            block_threshold=0.8,
         )
-        state = {**_make_state("bad"), "zone": "BLOCK", "classification": {"label": "injection", "top_score": 0.95, "threat_score": 0.95}}
-        before = _metric_value("firewall_requests_total", {"zone": "BLOCK", "final_decision": "BLOCK"})
+        state = {
+            **_make_state("bad"),
+            "zone": "BLOCK",
+            "classification": {"label": "injection", "top_score": 0.95, "threat_score": 0.95},
+        }
+        before = _metric_value(
+            "firewall_requests_total", {"zone": "BLOCK", "final_decision": "BLOCK"}
+        )
         nodes_mod.log_node(state)
-        after = _metric_value("firewall_requests_total", {"zone": "BLOCK", "final_decision": "BLOCK"})
+        after = _metric_value(
+            "firewall_requests_total", {"zone": "BLOCK", "final_decision": "BLOCK"}
+        )
         assert after == before + 1
 
 
@@ -134,16 +167,23 @@ class TestMetricsEndpoint:
     def _make_client() -> TestClient:
         mock_clf = MagicMock()
         mock_graph = MagicMock()
-        with patch("firewall.api.app.load_classifier", return_value=mock_clf), \
-             patch("firewall.api.app.build_graph", return_value=mock_graph), \
-             patch("firewall.api.app._load_config") as mock_cfg:
+        with (
+            patch("firewall.api.app.load_classifier", return_value=mock_clf),
+            patch("firewall.api.app.build_graph", return_value=mock_graph),
+            patch("firewall.api.app._load_config") as mock_cfg,
+        ):
             mock_cfg.return_value = {
-                "model_path": "dummy", "max_length": 512,
-                "clean_threshold": 0.3, "block_threshold": 0.8,
-                "judge_model": "dummy", "judge_max_tokens": 128,
+                "model_path": "dummy",
+                "max_length": 512,
+                "clean_threshold": 0.3,
+                "block_threshold": 0.8,
+                "judge_model": "dummy",
+                "judge_max_tokens": 128,
+                "judge_timeout": 10.0,
                 "retry_count": 1,
             }
             from firewall.api.app import create_app
+
             app = create_app()
         return TestClient(app)
 

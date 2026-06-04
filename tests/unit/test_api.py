@@ -5,45 +5,61 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
-
 from firewall.api.schemas import AnalysisRequest, ClassificationScore
+from pydantic import ValidationError
 
 
 def _graph_result(decision: str, zone: str, label: str, score: float, judge: bool) -> dict:
     return {
-        "prompt":           "test prompt",
-        "classification":   {"label": label, "scores": {label: score}, "top_score": score, "threat_score": score},
-        "zone":             zone,
-        "judge_result":     {"decision": decision, "reasoning": "ok", "confidence": 0.9} if judge else None,
-        "final_decision":   decision,
-        "explanation":      "test explanation",
-        "logs":             [],
+        "prompt": "test prompt",
+        "classification": {
+            "label": label,
+            "scores": {label: score},
+            "top_score": score,
+            "threat_score": score,
+        },
+        "zone": zone,
+        "judge_result": {"decision": decision, "reasoning": "ok", "confidence": 0.9}
+        if judge
+        else None,
+        "final_decision": decision,
+        "explanation": "test explanation",
+        "logs": [],
     }
 
 
 @pytest.fixture()
 def client():
-    """TestClient with mocked classifier + judge so no models are loaded."""
+    """TestClient whose lifespan runs with mocked classifier, judge and graph.
+
+    Entering ``TestClient`` as a context manager triggers the FastAPI lifespan,
+    so the real startup path (config load, classifier load, judge + graph build)
+    is exercised — against mocks, so no models or API keys are required.
+    """
     mock_clf = MagicMock()
     mock_graph = MagicMock()
 
-    with patch("firewall.api.app.load_classifier", return_value=mock_clf), \
-         patch("firewall.api.app.build_graph", return_value=mock_graph), \
-         patch("firewall.api.app._load_config") as mock_cfg:
-
+    with (
+        patch("firewall.api.app.load_classifier", return_value=mock_clf),
+        patch("firewall.api.app.build_graph", return_value=mock_graph),
+        patch("firewall.api.app.LLMJudge", return_value=MagicMock()),
+        patch("firewall.api.app._load_config") as mock_cfg,
+    ):
         mock_cfg.return_value = {
-            "model_path": "dummy", "clean_threshold": 0.3,
-            "block_threshold": 0.8, "judge_model": "dummy",
-            "judge_max_tokens": 128, "retry_count": 1,
+            "model_path": "dummy",
+            "max_length": 256,
+            "clean_threshold": 0.3,
+            "block_threshold": 0.8,
+            "judge_model": "dummy",
+            "judge_max_tokens": 128,
+            "judge_timeout": 10.0,
+            "retry_count": 1,
         }
         from firewall.api.app import create_app
-        app = create_app()
 
-    test_client = TestClient(app)
-    # Inject graph result via mock
-    test_client.app.state.graph = mock_graph
-    return test_client, mock_graph
+        app = create_app()
+        with TestClient(app) as test_client:
+            yield test_client, mock_graph
 
 
 class TestAnalyzeEndpoint:
@@ -93,7 +109,7 @@ class TestHealthEndpoint:
         response = test_client.get("/health")
         assert response.json()["status"] == "ok"
 
-    def test_health_model_loaded_false_before_startup(self, client) -> None:
+    def test_health_model_loaded_false_when_attribute_absent(self, client) -> None:
         test_client, _ = client
         if hasattr(test_client.app.state, "model_loaded"):
             del test_client.app.state.model_loaded
@@ -119,7 +135,6 @@ class TestSchemaValidation:
     def test_prompt_max_length_rejects_oversized(self) -> None:
         with pytest.raises(ValidationError, match="string_too_long"):
             AnalysisRequest(prompt="x" * 8193)
-
 
     def test_score_ge_rejects_negative(self) -> None:
         with pytest.raises(ValidationError, match="greater than or equal"):

@@ -123,7 +123,7 @@ SHAP token-level attributions highlight which tokens drove the classifier's deci
 
 ### Adversarial Robustness
 
-The classifier is evaluated against 20 adversarial prompts spanning 8 attack categories. Run `make test-integration` after training to reproduce.
+The classifier is evaluated against 20 adversarial prompts spanning 8 attack categories. Run `uv run pytest tests/integration/test_adversarial.py` after training to reproduce.
 
 | Attack type | Examples | Expected detection |
 |---|---|---|
@@ -141,7 +141,7 @@ The classifier is evaluated against 20 adversarial prompts spanning 8 attack cat
 
 ## Why This Design
 
-- **Hybrid classifier + LLM judge** — DeBERTa handles clear cases (~10ms), Claude judges the gray zone (10-20% of traffic). _Cuts LLM API costs by 80-90%. At 10K prompts/day: ~$3-6 hybrid vs ~$30 pure LLM._
+- **Hybrid classifier + LLM judge** — DeBERTa handles clear cases (~10ms), Claude judges the gray zone (10-20% of traffic). _Projected to cut LLM API costs by ~80-90% at that gray-zone rate. At 10K prompts/day: ~$3-6 hybrid vs ~$30 pure LLM._
 - **DeBERTa-v3 over BERT/RoBERTa** — disentangled attention + ELECTRA pretraining. _Disentangled attention matters for adversarial text where attackers manipulate word order and position. ELECTRA pretraining is more sample-efficient on small datasets (~1,270 examples)._
 - **Three-zone routing (clean/gray/block)** — configurable thresholds (0.3/0.8 defaults). _Binary classification forces a single decision boundary; the gray zone lets you tune the cost of false positives (user friction) vs false negatives (security breach) per deployment._
 - **F1 macro as primary metric** — not accuracy. _Accuracy is dominated by the majority class. For security, a missed jailbreak matters as much as a missed injection, regardless of class frequency._
