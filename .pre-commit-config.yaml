@@ -6,10 +6,15 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+  # Run mypy in the project's uv env (not an isolated hook env) so it sees the
+  # installed deps and the pyproject config — identical to `make typecheck`.
+  # Passing changed filenames would override `files = ["src/"]` and pull in tests,
+  # which intentionally aren't strict-typed, so filenames are not passed.
+  - repo: local
     hooks:
       - id: mypy
-        args: [--strict]
-        additional_dependencies:
-          - "pydantic>=2.7"
+        name: mypy (strict, src)
+        entry: uv run mypy --strict src/
+        language: system
+        types: [python]
+        pass_filenames: false
