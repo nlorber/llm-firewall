@@ -16,6 +16,7 @@ from sklearn.metrics import (
 
 from firewall.classifier.dataset import LABEL2ID
 from firewall.classifier.model import load_classifier
+from firewall.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +54,14 @@ def evaluate(
 
     all_label_ids = list(range(len(label_names)))
     return {
-        "accuracy":              float(accuracy_score(y_true, y_pred)),
-        "f1_macro":              float(f1_score(y_true, y_pred, average="macro", zero_division=0, labels=all_label_ids)),
-        "f1_weighted":           float(f1_score(y_true, y_pred, average="weighted", zero_division=0, labels=all_label_ids)),
-        "confusion_matrix":      confusion_matrix(y_true, y_pred, labels=all_label_ids),
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "f1_macro": float(
+            f1_score(y_true, y_pred, average="macro", zero_division=0, labels=all_label_ids)
+        ),
+        "f1_weighted": float(
+            f1_score(y_true, y_pred, average="weighted", zero_division=0, labels=all_label_ids)
+        ),
+        "confusion_matrix": confusion_matrix(y_true, y_pred, labels=all_label_ids),
         "classification_report": classification_report(
             y_true, y_pred, labels=all_label_ids, target_names=label_names, zero_division=0
         ),
@@ -112,11 +117,11 @@ def compute_robustness_metrics(
         bucket["exact"] += int(is_exact)
 
     return {
-        "n":                    n,
-        "detection_rate":       detected / n,
-        "block_rate":           blocked / n,
+        "n": n,
+        "detection_rate": detected / n,
+        "block_rate": blocked / n,
         "exact_class_accuracy": exact / n,
-        "per_attack_type":      per_type,
+        "per_attack_type": per_type,
     }
 
 
@@ -163,9 +168,31 @@ def evaluate_robustness(
     )
 
 
+def _write_metrics(results: dict[str, Any], path: Path) -> None:
+    """Persist the JSON-serialisable headline metrics so the README numbers have a
+    committed source of truth (mirrors transaction-classifier/reports/metrics.json)."""
+    cm = results["confusion_matrix"]
+    payload = {
+        "accuracy": results["accuracy"],
+        "f1_macro": results["f1_macro"],
+        "f1_weighted": results["f1_weighted"],
+        "confusion_matrix": cm.tolist() if hasattr(cm, "tolist") else cm,
+        "classification_report": results["classification_report"],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n")
+
+
 def main() -> None:
+    setup_logging()
     parser = argparse.ArgumentParser(description="Evaluate the fine-tuned classifier")
     parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument(
+        "--metrics-path",
+        type=Path,
+        default=Path("reports/metrics.json"),
+        help="Where to write the JSON metrics artifact.",
+    )
     args = parser.parse_args()
 
     config = yaml.safe_load(args.config.read_text())
@@ -179,8 +206,12 @@ def main() -> None:
     logger.info("F1 weighted: %.4f", results["f1_weighted"])
     logger.info("Classification report:\n%s", results["classification_report"])
 
+    _write_metrics(results, args.metrics_path)
+    logger.info("Wrote metrics to %s", args.metrics_path)
+
 
 def robustness_main() -> None:
+    setup_logging()
     parser = argparse.ArgumentParser(
         description="Evaluate OOD detection recall on a held-out attack set"
     )
@@ -204,7 +235,11 @@ def robustness_main() -> None:
     for atk, b in sorted(results["per_attack_type"].items()):
         logger.info(
             "  %-22s n=%d detected=%d blocked=%d exact=%d",
-            atk, b["n"], b["detected"], b["blocked"], b["exact"],
+            atk,
+            b["n"],
+            b["detected"],
+            b["blocked"],
+            b["exact"],
         )
 
 

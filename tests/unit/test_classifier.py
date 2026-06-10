@@ -11,7 +11,7 @@ import torch
 class TestFirewallDataset:
     def _mock_tokenizer_output(self, n: int, seq_len: int = 16) -> dict:
         return {
-            "input_ids":      torch.zeros(n, seq_len, dtype=torch.long),
+            "input_ids": torch.zeros(n, seq_len, dtype=torch.long),
             "attention_mask": torch.ones(n, seq_len, dtype=torch.long),
         }
 
@@ -90,13 +90,17 @@ class TestFirewallClassifier:
         """Return a FirewallClassifier with all HF calls mocked out."""
         from firewall.classifier.model import FirewallClassifier
 
-        with patch("firewall.classifier.model.AutoModelForSequenceClassification") as mock_m, \
-             patch("firewall.classifier.model.AutoTokenizer") as mock_t:
-
+        with (
+            patch("firewall.classifier.model.AutoModelForSequenceClassification") as mock_m,
+            patch("firewall.classifier.model.AutoTokenizer") as mock_t,
+        ):
             mock_model_inst = MagicMock()
             mock_model_inst.config.id2label = {
-                0: "benign", 1: "injection", 2: "jailbreak",
-                3: "exfiltration", 4: "escalation",
+                0: "benign",
+                1: "injection",
+                2: "jailbreak",
+                3: "exfiltration",
+                4: "escalation",
             }
             # Make .to() and .eval() return the same mock so clf.model == mock_model_inst
             mock_model_inst.to.return_value = mock_model_inst
@@ -107,7 +111,7 @@ class TestFirewallClassifier:
 
             mock_tok_inst = MagicMock()
             mock_tok_inst.return_value = {
-                "input_ids":      torch.zeros(1, 16, dtype=torch.long),
+                "input_ids": torch.zeros(1, 16, dtype=torch.long),
                 "attention_mask": torch.ones(1, 16, dtype=torch.long),
             }
             mock_t.from_pretrained.return_value = mock_tok_inst
@@ -120,7 +124,7 @@ class TestFirewallClassifier:
         clf, mock_m, mock_t = self._make_mock_classifier()
         mock_m.return_value.logits = torch.zeros(2, 5)
         mock_t.return_value = {
-            "input_ids":      torch.zeros(2, 16, dtype=torch.long),
+            "input_ids": torch.zeros(2, 16, dtype=torch.long),
             "attention_mask": torch.ones(2, 16, dtype=torch.long),
         }
         results = clf.predict(["hello", "ignore"])
@@ -130,7 +134,11 @@ class TestFirewallClassifier:
         clf, _, _ = self._make_mock_classifier()
         results = clf.predict(["hello"])
         assert set(results[0].keys()) == {
-            "benign", "injection", "jailbreak", "exfiltration", "escalation"
+            "benign",
+            "injection",
+            "jailbreak",
+            "exfiltration",
+            "escalation",
         }
 
     def test_predict_probabilities_sum_to_one(self) -> None:
@@ -198,7 +206,6 @@ class TestWeightedTrainer:
 class TestComputeMetrics:
     def test_all_keys_present(self) -> None:
         import numpy as np
-
         from firewall.classifier.train import compute_metrics
 
         logits = np.array([[2.0, 0.1, 0.1, 0.1, 0.1], [0.1, 2.0, 0.1, 0.1, 0.1]])
@@ -211,7 +218,6 @@ class TestComputeMetrics:
     def test_perfect_predictions_give_f1_of_one(self) -> None:
         import numpy as np
         import pytest
-
         from firewall.classifier.train import compute_metrics
 
         logits = np.eye(5) * 10
@@ -229,8 +235,13 @@ class TestEvaluate:
 
         mock_clf = MagicMock()
         mock_clf.predict.return_value = [
-            {"benign": 0.8, "injection": 0.1, "jailbreak": 0.05,
-             "exfiltration": 0.03, "escalation": 0.02}
+            {
+                "benign": 0.8,
+                "injection": 0.1,
+                "jailbreak": 0.05,
+                "exfiltration": 0.03,
+                "escalation": 0.02,
+            }
         ]
 
         test_jsonl = tmp_path / "test.jsonl"
@@ -255,8 +266,13 @@ class TestEvaluate:
 
         mock_clf = MagicMock()
         mock_clf.predict.return_value = [
-            {"benign": 0.9, "injection": 0.05, "jailbreak": 0.02,
-             "exfiltration": 0.02, "escalation": 0.01}
+            {
+                "benign": 0.9,
+                "injection": 0.05,
+                "jailbreak": 0.02,
+                "exfiltration": 0.02,
+                "escalation": 0.01,
+            }
         ]
 
         test_jsonl = tmp_path / "test.jsonl"
@@ -275,7 +291,6 @@ class TestEvaluate:
 class TestEvaluateMain:
     def test_main_parses_config_and_prints_results(self, tmp_path) -> None:
         import yaml
-
         from firewall.classifier.evaluate import main
 
         config = {
@@ -293,18 +308,33 @@ class TestEvaluateMain:
             "confusion_matrix": [[1]],
             "classification_report": "dummy report",
         }
+        metrics_path = tmp_path / "metrics.json"
 
-        with patch("firewall.classifier.evaluate.evaluate", return_value=mock_results), \
-             patch("sys.argv", ["evaluate", "--config", str(config_path)]):
+        with (
+            patch("firewall.classifier.evaluate.evaluate", return_value=mock_results),
+            patch(
+                "sys.argv",
+                ["evaluate", "--config", str(config_path), "--metrics-path", str(metrics_path)],
+            ),
+        ):
             main()
+
+        import json
+
+        written = json.loads(metrics_path.read_text())
+        assert written["accuracy"] == 0.95
+        assert written["confusion_matrix"] == [[1]]
 
 
 class TestRobustnessMetrics:
     @staticmethod
     def _scores(**kw: float) -> dict[str, float]:
         base = {
-            "benign": 0.0, "injection": 0.0, "jailbreak": 0.0,
-            "exfiltration": 0.0, "escalation": 0.0,
+            "benign": 0.0,
+            "injection": 0.0,
+            "jailbreak": 0.0,
+            "exfiltration": 0.0,
+            "escalation": 0.0,
         }
         base.update(kw)
         return base
@@ -319,10 +349,16 @@ class TestRobustnessMetrics:
         from firewall.classifier.evaluate import compute_robustness_metrics
 
         # One attack caught (threat_score 0.9 >= 0.3), one missed (0.05 < 0.3).
-        preds = [self._scores(benign=0.1, injection=0.9), self._scores(benign=0.95, injection=0.05)]
+        preds = [
+            self._scores(benign=0.1, injection=0.9),
+            self._scores(benign=0.95, injection=0.05),
+        ]
         result = compute_robustness_metrics(
-            preds, ["injection", "injection"], ["base64", "roleplay"],
-            clean_threshold=0.3, block_threshold=0.8,
+            preds,
+            ["injection", "injection"],
+            ["base64", "roleplay"],
+            clean_threshold=0.3,
+            block_threshold=0.8,
         )
         assert result["n"] == 2
         assert result["detection_rate"] == pytest.approx(0.5)
@@ -333,8 +369,11 @@ class TestRobustnessMetrics:
         # Both detected (>= 0.3) but only one hard-blocked (>= 0.8).
         preds = [self._scores(injection=0.9), self._scores(injection=0.5)]
         result = compute_robustness_metrics(
-            preds, ["injection", "injection"], ["a", "b"],
-            clean_threshold=0.3, block_threshold=0.8,
+            preds,
+            ["injection", "injection"],
+            ["a", "b"],
+            clean_threshold=0.3,
+            block_threshold=0.8,
         )
         assert result["detection_rate"] == pytest.approx(1.0)
         assert result["block_rate"] == pytest.approx(0.5)
@@ -345,8 +384,11 @@ class TestRobustnessMetrics:
         # First top-label matches true label, second does not.
         preds = [self._scores(injection=0.9), self._scores(jailbreak=0.9)]
         result = compute_robustness_metrics(
-            preds, ["injection", "injection"], ["a", "b"],
-            clean_threshold=0.3, block_threshold=0.8,
+            preds,
+            ["injection", "injection"],
+            ["a", "b"],
+            clean_threshold=0.3,
+            block_threshold=0.8,
         )
         assert result["exact_class_accuracy"] == pytest.approx(0.5)
 
@@ -355,8 +397,11 @@ class TestRobustnessMetrics:
 
         preds = [self._scores(injection=0.9), self._scores(benign=0.99, injection=0.01)]
         result = compute_robustness_metrics(
-            preds, ["injection", "injection"], ["base64", "base64"],
-            clean_threshold=0.3, block_threshold=0.8,
+            preds,
+            ["injection", "injection"],
+            ["base64", "base64"],
+            clean_threshold=0.3,
+            block_threshold=0.8,
         )
         bucket = result["per_attack_type"]["base64"]
         assert bucket["n"] == 2
@@ -375,16 +420,23 @@ class TestEvaluateRobustness:
 
         mock_clf = MagicMock()
         mock_clf.predict.return_value = [
-            {"benign": 0.1, "injection": 0.9, "jailbreak": 0.0,
-             "exfiltration": 0.0, "escalation": 0.0}
+            {
+                "benign": 0.1,
+                "injection": 0.9,
+                "jailbreak": 0.0,
+                "exfiltration": 0.0,
+                "escalation": 0.0,
+            }
         ]
         data = tmp_path / "adv.jsonl"
         data.write_text('{"text": "x", "label": "injection", "attack_type": "base64"}\n')
 
         with patch("firewall.classifier.evaluate.load_classifier", return_value=mock_clf):
             result = evaluate_robustness(
-                model_path="dummy", data_path=data,
-                clean_threshold=0.3, block_threshold=0.8,
+                model_path="dummy",
+                data_path=data,
+                clean_threshold=0.3,
+                block_threshold=0.8,
             )
         assert result["n"] == 1
         assert result["detection_rate"] == pytest.approx(1.0)
@@ -396,11 +448,15 @@ class TestEvaluateRobustness:
         data = tmp_path / "adv.jsonl"
         data.write_text('{"text": "hi", "label": "benign", "attack_type": "none"}\n')
 
-        with patch("firewall.classifier.evaluate.load_classifier", return_value=mock_clf), \
-             pytest.raises(ValueError, match="only threats"):
+        with (
+            patch("firewall.classifier.evaluate.load_classifier", return_value=mock_clf),
+            pytest.raises(ValueError, match="only threats"),
+        ):
             evaluate_robustness(
-                model_path="dummy", data_path=data,
-                clean_threshold=0.3, block_threshold=0.8,
+                model_path="dummy",
+                data_path=data,
+                clean_threshold=0.3,
+                block_threshold=0.8,
             )
 
 
@@ -419,12 +475,18 @@ class TestRobustnessMain:
             "per_attack_type": {"base64": {"n": 1, "detected": 1, "blocked": 1, "exact": 1}},
         }
         argv = [
-            "robustness", "--model-path", "dummy/model",
-            "--data-path", str(data_path),
+            "robustness",
+            "--model-path",
+            "dummy/model",
+            "--data-path",
+            str(data_path),
         ]
-        with patch(
-            "firewall.classifier.evaluate.evaluate_robustness", return_value=mock_results
-        ) as mock_eval, patch("sys.argv", argv):
+        with (
+            patch(
+                "firewall.classifier.evaluate.evaluate_robustness", return_value=mock_results
+            ) as mock_eval,
+            patch("sys.argv", argv),
+        ):
             robustness_main()
 
         mock_eval.assert_called_once()
@@ -440,8 +502,13 @@ class TestSHAPExplainer:
 
         def fake_predict(texts):
             return [
-                {"benign": 0.8, "injection": 0.1, "jailbreak": 0.05,
-                 "exfiltration": 0.03, "escalation": 0.02}
+                {
+                    "benign": 0.8,
+                    "injection": 0.1,
+                    "jailbreak": 0.05,
+                    "exfiltration": 0.03,
+                    "escalation": 0.02,
+                }
                 for _ in texts
             ]
 
@@ -462,8 +529,13 @@ class TestSHAPExplainer:
 
         def fake_predict(texts):
             return [
-                {"benign": 0.8, "injection": 0.1, "jailbreak": 0.05,
-                 "exfiltration": 0.03, "escalation": 0.02}
+                {
+                    "benign": 0.8,
+                    "injection": 0.1,
+                    "jailbreak": 0.05,
+                    "exfiltration": 0.03,
+                    "escalation": 0.02,
+                }
                 for _ in texts
             ]
 

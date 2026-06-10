@@ -37,8 +37,8 @@ flowchart LR
     end
 
     subgraph LangGraph
-        CLS[classify_node\nDeBERTa ~10ms]
-        JDG[judge_node\nClaude ~500ms]
+        CLS[classify_node<br/>DeBERTa ~10ms]
+        JDG[judge_node<br/>Claude ~500ms]
         EXE[execute_node]
         LOG[log_node]
     end
@@ -103,7 +103,7 @@ Caveat: n=20 is small and the attacks are curated, so read 100% detection as "no
 on these techniques," not a guarantee. Reproduce with:
 
 ```bash
-firewall-robustness --model-path models/classifier \
+uv run firewall-robustness --model-path models/classifier \
   --data-path data/adversarial/adversarial_prompts.jsonl
 ```
 
@@ -157,12 +157,12 @@ uv sync --extra dev
 
 # 2. Download and prepare data (requires ANTHROPIC_API_KEY for synthetic generation)
 export ANTHROPIC_API_KEY=sk-...
-python data/download.py --output-dir data/raw
-python data/prepare.py  --input-dir data/raw --output-dir data/processed
+uv run python data/download.py --output-dir data/raw
+uv run python data/prepare.py  --input-dir data/raw --output-dir data/processed
 
 # Without an API key, use --skip-synthetic and --skip-augment (3 classes only)
-# python data/download.py --output-dir data/raw --skip-synthetic
-# python data/prepare.py  --input-dir data/raw --output-dir data/processed --skip-augment
+# uv run python data/download.py --output-dir data/raw --skip-synthetic
+# uv run python data/prepare.py  --input-dir data/raw --output-dir data/processed --skip-augment
 
 # 3. Fine-tune
 make train

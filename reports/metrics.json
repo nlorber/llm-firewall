@@ -1,0 +1,43 @@
+{
+  "accuracy": 0.9947643979057592,
+  "f1_macro": 0.9947054075867635,
+  "f1_weighted": 0.99474495983503,
+  "confusion_matrix": [
+    [
+      52,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      48,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      29,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      45,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      16
+    ]
+  ],
+  "classification_report": "              precision    recall  f1-score   support\n\n      benign       0.98      1.00      0.99        52\n   injection       1.00      1.00      1.00        48\n   jailbreak       1.00      0.97      0.98        30\nexfiltration       1.00      1.00      1.00        45\n  escalation       1.00      1.00      1.00        16\n\n    accuracy                           0.99       191\n   macro avg       1.00      0.99      0.99       191\nweighted avg       0.99      0.99      0.99       191\n"
+}
