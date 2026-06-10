@@ -75,9 +75,9 @@ def classify_node(state: FirewallState) -> dict[str, Any]:
 
     return {
         "classification": {
-            "label":        top_label,
-            "scores":       scores,
-            "top_score":    top_score,
+            "label": top_label,
+            "scores": scores,
+            "top_score": top_score,
             "threat_score": threat_score,
         },
         "zone": zone,
@@ -101,8 +101,8 @@ def judge_node(state: FirewallState) -> dict[str, Any]:
     judge_duration.labels(decision=verdict.decision).observe(elapsed)
     return {
         "judge_result": {
-            "decision":   verdict.decision,
-            "reasoning":  verdict.reasoning,
+            "decision": verdict.decision,
+            "reasoning": verdict.reasoning,
             "confidence": verdict.confidence,
         }
     }
@@ -111,9 +111,17 @@ def judge_node(state: FirewallState) -> dict[str, Any]:
 def execute_node(state: FirewallState) -> dict[str, Any]:
     """Finalise a PASS decision."""
     clf: dict[str, Any] = dict(state.get("classification") or {})
-    label = clf.get("label", "unknown")
-    score = clf.get("threat_score", 0.0)
-    explanation = f"Prompt classified as '{label}' (threat_score {score:.2f}) — below block threshold. PASS."
+    judge_result = state.get("judge_result")
+
+    if judge_result:
+        # Gray-zone prompt the judge cleared — attribute the call to the judge, not the
+        # threshold (the threat score was in the gray band; the threshold did not decide).
+        explanation = f"LLM judge decision: PASS. Reasoning: {judge_result['reasoning']}"
+    else:
+        label = clf.get("label", "unknown")
+        score = clf.get("threat_score", 0.0)
+        explanation = f"Prompt classified as '{label}' (threat_score {score:.2f}) — below block threshold. PASS."
+
     requests_total.labels(zone=state.get("zone", "unknown"), final_decision="PASS").inc()
     return {"final_decision": "PASS", "explanation": explanation}
 
@@ -124,31 +132,29 @@ def log_node(state: FirewallState) -> dict[str, Any]:
     judge_result = state.get("judge_result")
 
     if judge_result:
-        explanation = (
-            f"LLM judge decision: BLOCK. Reasoning: {judge_result['reasoning']}"
-        )
+        explanation = f"LLM judge decision: BLOCK. Reasoning: {judge_result['reasoning']}"
     else:
         label = clf.get("label", "unknown")
         score = clf.get("threat_score", 0.0)
         explanation = f"Prompt classified as '{label}' (threat_score {score:.2f}) — above block threshold. BLOCK."
 
     log_entry: dict[str, Any] = {
-        "timestamp":    datetime.now(UTC).isoformat(),
-        "prompt":       state["prompt"],
-        "zone":         state.get("zone"),
-        "label":        clf.get("label"),
-        "top_score":    clf.get("top_score"),
+        "timestamp": datetime.now(UTC).isoformat(),
+        "prompt": state["prompt"],
+        "zone": state.get("zone"),
+        "label": clf.get("label"),
+        "top_score": clf.get("top_score"),
         "threat_score": clf.get("threat_score"),
         "judge_result": judge_result,
-        "explanation":  explanation,
+        "explanation": explanation,
     }
 
     requests_total.labels(zone=state.get("zone", "unknown"), final_decision="BLOCK").inc()
     existing_logs: list[dict[str, Any]] = list(state.get("logs") or [])
     return {
         "final_decision": "BLOCK",
-        "explanation":    explanation,
-        "logs":           existing_logs + [log_entry],
+        "explanation": explanation,
+        "logs": existing_logs + [log_entry],
     }
 
 
