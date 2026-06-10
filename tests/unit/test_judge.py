@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import anthropic
 import pytest
+
 from firewall.judge.judge import JudgeVerdict, LLMJudge
 
 

@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import firewall.orchestrator.nodes as nodes_mod
 import pytest
+
+import firewall.orchestrator.nodes as nodes_mod
 from firewall.judge.judge import JudgeVerdict
 from firewall.orchestrator.state import FirewallState
 

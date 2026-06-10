@@ -206,6 +206,7 @@ class TestWeightedTrainer:
 class TestComputeMetrics:
     def test_all_keys_present(self) -> None:
         import numpy as np
+
         from firewall.classifier.train import compute_metrics
 
         logits = np.array([[2.0, 0.1, 0.1, 0.1, 0.1], [0.1, 2.0, 0.1, 0.1, 0.1]])
@@ -218,6 +219,7 @@ class TestComputeMetrics:
     def test_perfect_predictions_give_f1_of_one(self) -> None:
         import numpy as np
         import pytest
+
         from firewall.classifier.train import compute_metrics
 
         logits = np.eye(5) * 10
@@ -291,6 +293,7 @@ class TestEvaluate:
 class TestEvaluateMain:
     def test_main_parses_config_and_prints_results(self, tmp_path) -> None:
         import yaml
+
         from firewall.classifier.evaluate import main
 
         config = {
