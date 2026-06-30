@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 from firewall.judge.distill.data import (
     Candidate,
     GrayCandidate,
     classify_and_filter_gray,
+    generate_borderline,
+    generate_coercion,
     load_raw_candidates,
 )
 
@@ -55,3 +59,29 @@ def test_classify_and_filter_keeps_only_gray() -> None:
     assert gray[0].provenance == "gen"
     assert gray[0].classifier_label == "injection"
     assert gray[0].threat_score == 0.5
+
+
+def _mock_client(batches: list[list[str]]) -> MagicMock:
+    client = MagicMock()
+    responses = []
+    for batch in batches:
+        msg = MagicMock()
+        msg.content = [MagicMock(text=json.dumps(batch))]
+        responses.append(msg)
+    client.messages.create.side_effect = responses
+    return client
+
+
+def test_generate_borderline_collects_and_tags() -> None:
+    client = _mock_client([["p1", "p2"], ["p3"]])
+    out = generate_borderline(client, model="m", n=3, batch_size=2)
+    assert [c.text for c in out] == ["p1", "p2", "p3"]
+    assert all(c.provenance == "gen" for c in out)
+    assert client.messages.create.call_count == 2  # ceil(3/2)
+
+
+def test_generate_coercion_tags_coercion() -> None:
+    client = _mock_client([["coerce1", "coerce2"]])
+    out = generate_coercion(client, model="m", n=2, batch_size=2)
+    assert all(c.provenance == "coercion" for c in out)
+    assert len(out) == 2
