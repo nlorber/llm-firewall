@@ -73,25 +73,30 @@ def classify_and_filter_gray(
     candidates: list[Candidate],
     clean_threshold: float,
     block_threshold: float,
+    batch_size: int = 32,
 ) -> list[GrayCandidate]:
-    """Classify candidates and keep only those whose threat score is in the GRAY band."""
-    if not candidates:
-        return []
-    score_dicts = classifier.predict([c.text for c in candidates])
+    """Classify candidates (in batches) and keep only those in the GRAY band.
+
+    ``predict`` runs a whole list in a single forward pass, so we chunk it: scoring a few
+    thousand prompts at once exhausts memory (the production caller only ever passes one).
+    """
     gray: list[GrayCandidate] = []
-    for cand, scores in zip(candidates, score_dicts, strict=True):
-        threat = _threat_score(scores)
-        if clean_threshold <= threat < block_threshold:
-            top_label = max(scores, key=scores.__getitem__)
-            gray.append(
-                GrayCandidate(
-                    text=cand.text,
-                    provenance=cand.provenance,
-                    classifier_label=top_label,
-                    scores=scores,
-                    threat_score=threat,
+    for start in range(0, len(candidates), batch_size):
+        chunk = candidates[start : start + batch_size]
+        score_dicts = classifier.predict([c.text for c in chunk])
+        for cand, scores in zip(chunk, score_dicts, strict=True):
+            threat = _threat_score(scores)
+            if clean_threshold <= threat < block_threshold:
+                top_label = max(scores, key=scores.__getitem__)
+                gray.append(
+                    GrayCandidate(
+                        text=cand.text,
+                        provenance=cand.provenance,
+                        classifier_label=top_label,
+                        scores=scores,
+                        threat_score=threat,
+                    )
                 )
-            )
     return gray
 
 

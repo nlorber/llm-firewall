@@ -66,6 +66,26 @@ def test_classify_and_filter_keeps_only_gray() -> None:
     assert gray[0].threat_score == 0.5
 
 
+class _CountingClassifier:
+    """Counts predict() calls and scores every prompt into the GRAY band."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def predict(self, prompts: list[str]) -> list[dict[str, float]]:
+        self.calls += 1
+        return [{"benign": 0.5, "injection": 0.5} for _ in prompts]
+
+
+def test_classify_batches_predict_calls() -> None:
+    # 70 candidates at batch_size 32 -> 3 predict calls (32, 32, 6), never one big batch.
+    cands = [Candidate(f"p{i}", "raw") for i in range(70)]
+    clf = _CountingClassifier()
+    gray = classify_and_filter_gray(clf, cands, 0.3, 0.8, batch_size=32)
+    assert clf.calls == 3
+    assert len(gray) == 70  # all scored into the GRAY band
+
+
 def _mock_client(batches: list[list[str]]) -> MagicMock:
     client = MagicMock()
     responses = []
