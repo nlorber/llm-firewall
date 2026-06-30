@@ -255,16 +255,30 @@ def build_corpus(
         config.n_generated_coercion,
         config.generation_batch_size,
     )
+    print(f"[distill-data] sourced {len(candidates)} candidates; classifying (CPU, batched)...")
     gray = classify_and_filter_gray(
         classifier, candidates, config.clean_threshold, config.block_threshold
+    )
+    pct = 100 * len(gray) / max(len(candidates), 1)
+    print(
+        f"[distill-data] GRAY band: {len(gray)}/{len(candidates)} ({pct:.1f}%); "
+        f"provenance={dict(Counter(g.provenance for g in gray))}"
     )
     # Cap to target BEFORE the (paid) teacher-labeling step, seeded for reproducibility.
     random.Random(config.seed).shuffle(gray)
     gray = gray[: config.target_gray_total]
+    print(f"[distill-data] teacher-labeling {len(gray)} GRAY prompts (slow, paid)...")
     records = teacher_label(judge, gray)
-    train, val, test = stratified_split_by_decision(
-        records, config.val_ratio, config.test_ratio, config.seed
-    )
+    try:
+        train, val, test = stratified_split_by_decision(
+            records, config.val_ratio, config.test_ratio, config.seed
+        )
+    except ValueError as exc:
+        decisions = dict(Counter(r["meta"]["decision"] for r in records))
+        raise ValueError(
+            f"could not split {len(records)} GRAY records (decisions={decisions}); "
+            "GRAY yield too low — raise n_generated_* or lower target_gray_total."
+        ) from exc
     _write_jsonl(train, config.output_dir / "train.jsonl")
     _write_jsonl(val, config.output_dir / "val.jsonl")
     _write_jsonl(test, config.output_dir / "test.jsonl")

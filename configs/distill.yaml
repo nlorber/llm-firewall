@@ -3,6 +3,10 @@
 # Candidates are sourced (data/raw + Claude-generated borderline/coercion), classified by
 # the live DeBERTa model, and only the GRAY band (clean<=threat<block) is kept and then
 # teacher-labeled by Claude. Thresholds MUST match configs/orchestrator.yaml.
+#
+# Measured GRAY yield is low (the classifier is confident on its training distribution:
+# ~1/970 raw, ~10% of generated land in GRAY), so generation over-produces heavily and the
+# GRAY filter + seeded cap trim to target_gray_total before the paid teacher-labeling step.
 
 raw_dir: "data/raw"
 output_dir: "data/distill"
@@ -17,11 +21,10 @@ generation_model: "claude-haiku-4-5-20251001"
 teacher_model: "claude-haiku-4-5-20251001"
 teacher_temperature: 0.0
 
-# Sizing (first build). Generation over-produces; the GRAY filter + seeded cap trim
-# to target_gray_total BEFORE the paid teacher-labeling step.
-target_gray_total: 1200
-n_generated_borderline: 1500
-n_generated_coercion: 600
+# Target ~500 GRAY: generate ~5000 prompts (~10% yield), cap to target before labeling.
+target_gray_total: 500
+n_generated_borderline: 3000
+n_generated_coercion: 2000
 generation_batch_size: 20
 
 val_ratio: 0.15
