@@ -1,0 +1,29 @@
+# Distillation corpus build configuration.
+#
+# Candidates are sourced (data/raw + Claude-generated borderline/coercion), classified by
+# the live DeBERTa model, and only the GRAY band (clean<=threat<block) is kept and then
+# teacher-labeled by Claude. Thresholds MUST match configs/orchestrator.yaml.
+
+raw_dir: "data/raw"
+output_dir: "data/distill"
+
+clean_threshold: 0.3
+block_threshold: 0.8
+
+classifier_path: "models/classifier"
+classifier_max_length: 512
+
+generation_model: "claude-haiku-4-5-20251001"
+teacher_model: "claude-haiku-4-5-20251001"
+teacher_temperature: 0.0
+
+# Sizing (first build). Generation over-produces; the GRAY filter + seeded cap trim
+# to target_gray_total BEFORE the paid teacher-labeling step.
+target_gray_total: 1200
+n_generated_borderline: 1500
+n_generated_coercion: 600
+generation_batch_size: 20
+
+val_ratio: 0.15
+test_ratio: 0.15
+seed: 42
