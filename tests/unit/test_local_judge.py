@@ -81,3 +81,13 @@ class TestLocalJudgeFailureModes:
         verdict = judge.judge("hi", "benign", {"benign": 0.45})
         assert verdict.decision == "PASS"
         assert calls["n"] == 2  # greedy attempt failed, one resample succeeded
+
+    def test_resample_failure_falls_through_to_policy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Both the greedy attempt and the resample produce invalid JSON → the failure
+        # policy applies (here: fail-closed to BLOCK).
+        judge = LocalJudge("fake-model", on_failure="block", resample_temp=0.7)
+        monkeypatch.setattr(judge, "_generate", _fixed("STILL NOT JSON"))
+        verdict = judge.judge("x", "injection", {"injection": 0.5})
+        assert verdict.decision == "BLOCK"
