@@ -4,6 +4,7 @@ import json
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
+from firewall.judge.base import JudgeVerdict
 from firewall.judge.distill.data import (
     Candidate,
     GrayCandidate,
@@ -11,6 +12,8 @@ from firewall.judge.distill.data import (
     generate_borderline,
     generate_coercion,
     load_raw_candidates,
+    stratified_split_by_decision,
+    teacher_label,
 )
 
 if TYPE_CHECKING:
@@ -85,3 +88,41 @@ def test_generate_coercion_tags_coercion() -> None:
     out = generate_coercion(client, model="m", n=2, batch_size=2)
     assert all(c.provenance == "coercion" for c in out)
     assert len(out) == 2
+
+
+class _FakeJudge:
+    """Returns a fixed verdict per prompt text."""
+
+    def __init__(self, verdicts: dict[str, JudgeVerdict]) -> None:
+        self._verdicts = verdicts
+
+    def judge(
+        self, prompt: str, classification_label: str, scores: dict[str, float]
+    ) -> JudgeVerdict:
+        return self._verdicts[prompt]
+
+
+def test_teacher_label_builds_records_with_messages_and_meta() -> None:
+    gray = [GrayCandidate("gray one", "gen", "injection", {"benign": 0.5, "injection": 0.5}, 0.5)]
+    judge = _FakeJudge({"gray one": JudgeVerdict("BLOCK", "looks adversarial", 0.7)})
+    records = teacher_label(judge, gray)
+    rec = records[0]
+    roles = [m["role"] for m in rec["messages"]]
+    assert roles == ["system", "user", "assistant"]
+    assert json.loads(rec["messages"][2]["content"])["decision"] == "BLOCK"
+    assert rec["meta"]["decision"] == "BLOCK"
+    assert rec["meta"]["provenance"] == "gen"
+    assert rec["meta"]["text"] == "gray one"
+    assert rec["meta"]["scores"] == {"benign": 0.5, "injection": 0.5}
+
+
+def test_stratified_split_preserves_decision_mix_and_partitions() -> None:
+    records = [{"meta": {"decision": "BLOCK" if i % 2 else "PASS"}} for i in range(20)]
+    train, val, test = stratified_split_by_decision(
+        records, val_ratio=0.2, test_ratio=0.2, seed=42
+    )
+    assert len(train) + len(val) + len(test) == 20
+    assert len(val) == 4 and len(test) == 4
+    # disjoint partition (object ids unique across splits)
+    ids = [id(r) for r in train + val + test]
+    assert len(set(ids)) == 20

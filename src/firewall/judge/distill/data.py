@@ -13,8 +13,12 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
+from firewall.judge.base import build_judge_messages
+
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from firewall.judge.base import ChatMessage, Judge
 
 
 class _Classifier(Protocol):
@@ -153,3 +157,62 @@ def generate_borderline(client: Any, model: str, n: int, batch_size: int) -> lis
 def generate_coercion(client: Any, model: str, n: int, batch_size: int) -> list[Candidate]:
     """Generate judge-directed coercion prompts, both-outcome (provenance "coercion")."""
     return generate_candidates(client, model, _COERCION_INSTRUCTION, "coercion", n, batch_size)
+
+
+def teacher_label(judge: Judge, gray: list[GrayCandidate]) -> list[dict[str, Any]]:
+    """Run the teacher judge on each GRAY candidate and assemble an SFT record.
+
+    ``messages`` (system + user + assistant) is the training target with the per-example
+    nonce baked in; ``meta`` carries everything the evaluator needs to re-run judges.
+    """
+    records: list[dict[str, Any]] = []
+    for cand in gray:
+        verdict = judge.judge(cand.text, cand.classifier_label, cand.scores)
+        messages, _boundary = build_judge_messages(cand.text, cand.classifier_label, cand.scores)
+        completion = json.dumps(
+            {
+                "decision": verdict.decision,
+                "reasoning": verdict.reasoning,
+                "confidence": verdict.confidence,
+            }
+        )
+        full: list[ChatMessage] = [*messages, {"role": "assistant", "content": completion}]
+        records.append(
+            {
+                "messages": full,
+                "meta": {
+                    "text": cand.text,
+                    "provenance": cand.provenance,
+                    "classifier_label": cand.classifier_label,
+                    "scores": cand.scores,
+                    "decision": verdict.decision,
+                    "reasoning": verdict.reasoning,
+                    "confidence": verdict.confidence,
+                    "threat_score": cand.threat_score,
+                },
+            }
+        )
+    return records
+
+
+def stratified_split_by_decision(
+    records: list[dict[str, Any]],
+    val_ratio: float,
+    test_ratio: float,
+    seed: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split records into train/val/test, stratified by teacher decision."""
+    from sklearn.model_selection import StratifiedShuffleSplit
+
+    labels = [r["meta"]["decision"] for r in records]
+    idx = list(range(len(records)))
+    sss1 = StratifiedShuffleSplit(n_splits=1, test_size=test_ratio, random_state=seed)
+    trainval_i, test_i = next(sss1.split(idx, labels))
+    tv_labels = [labels[i] for i in trainval_i]
+    adjusted_val = val_ratio / (1 - test_ratio)
+    sss2 = StratifiedShuffleSplit(n_splits=1, test_size=adjusted_val, random_state=seed)
+    train_rel, val_rel = next(sss2.split(list(trainval_i), tv_labels))
+    train = [records[trainval_i[i]] for i in train_rel]
+    val = [records[trainval_i[i]] for i in val_rel]
+    test = [records[i] for i in test_i]
+    return train, val, test
