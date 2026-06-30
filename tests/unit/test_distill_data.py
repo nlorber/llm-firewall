@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 from firewall.judge.base import JudgeVerdict
+from firewall.judge.distill.config import DistillConfig
 from firewall.judge.distill.data import (
     Candidate,
     GrayCandidate,
+    build_corpus,
     classify_and_filter_gray,
     generate_borderline,
     generate_coercion,
@@ -126,3 +128,40 @@ def test_stratified_split_preserves_decision_mix_and_partitions() -> None:
     # disjoint partition (object ids unique across splits)
     ids = [id(r) for r in train + val + test]
     assert len(set(ids)) == 20
+
+
+def test_build_corpus_writes_splits_and_caps(tmp_path: Path) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "r.jsonl").write_text('{"text": "gray raw", "label": "injection"}\n')
+    cfg = DistillConfig(
+        raw_dir=raw,
+        output_dir=tmp_path / "out",
+        clean_threshold=0.3,
+        block_threshold=0.8,
+        classifier_path="x",
+        classifier_max_length=512,
+        generation_model="m",
+        teacher_model="m",
+        teacher_temperature=0.0,
+        target_gray_total=8,
+        n_generated_borderline=4,
+        n_generated_coercion=4,
+        generation_batch_size=4,
+        val_ratio=0.25,
+        test_ratio=0.25,
+        seed=42,
+    )
+    texts = ["gray raw", "g1", "g2", "g3", "g4", "c1", "c2", "c3", "c4"]
+    clf = _FakeClassifier({t: {"benign": 0.5, "injection": 0.5} for t in texts})
+    client = _mock_client([["g1", "g2", "g3", "g4"], ["c1", "c2", "c3", "c4"]])
+    judge = _FakeJudge(
+        {t: JudgeVerdict("BLOCK" if i % 2 else "PASS", "r", 0.6) for i, t in enumerate(texts)}
+    )
+    counts = build_corpus(cfg, clf, judge, client)
+    assert counts["gray_total"] == 8  # 9 GRAY candidates capped to target_gray_total
+    assert (cfg.output_dir / "train.jsonl").exists()
+    assert (cfg.output_dir / "val.jsonl").exists()
+    assert (cfg.output_dir / "test.jsonl").exists()
+    assert (cfg.output_dir / "manifest.json").exists()
+    assert counts["train"] + counts["val"] + counts["test"] == 8
