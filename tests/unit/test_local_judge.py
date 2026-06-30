@@ -52,3 +52,32 @@ class TestLocalJudgeNonThinking:
         monkeypatch.setattr(judge, "_generate", _fixed(leaked))
         with pytest.raises(ThinkingModeError, match="think"):
             judge.judge("hello", "benign", {"benign": 0.45})
+
+
+class TestLocalJudgeFailureModes:
+    def test_invalid_raises_when_on_failure_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        judge = LocalJudge("fake-model", on_failure="raise")
+        monkeypatch.setattr(judge, "_generate", _fixed("NOT JSON"))
+        with pytest.raises(ValueError, match="invalid verdict"):
+            judge.judge("x", "injection", {"injection": 0.5})
+
+    def test_invalid_blocks_when_on_failure_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        judge = LocalJudge("fake-model", on_failure="block")
+        monkeypatch.setattr(judge, "_generate", _fixed("NOT JSON"))
+        verdict = judge.judge("x", "injection", {"injection": 0.5})
+        assert verdict.decision == "BLOCK"
+        assert verdict.confidence == pytest.approx(1.0)
+
+    def test_resample_recovers_then_parses(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        judge = LocalJudge("fake-model", on_failure="block", resample_temp=0.7)
+        calls: dict[str, int] = {"n": 0}
+        good = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})
+
+        def _gen(messages: list[ChatMessage], temp: float) -> str:
+            calls["n"] += 1
+            return "NOT JSON" if calls["n"] == 1 else good
+
+        monkeypatch.setattr(judge, "_generate", _gen)
+        verdict = judge.judge("hi", "benign", {"benign": 0.45})
+        assert verdict.decision == "PASS"
+        assert calls["n"] == 2  # greedy attempt failed, one resample succeeded

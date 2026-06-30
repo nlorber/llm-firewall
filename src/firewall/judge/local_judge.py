@@ -60,8 +60,28 @@ class LocalJudge:
         return self._parse_or_recover(raw, messages)
 
     def _parse_or_recover(self, raw: str, messages: list[ChatMessage]) -> JudgeVerdict:
+        """Parse the greedy output; on schema failure optionally resample once, then
+        apply the failure policy. A temp-0 retry would reproduce identical invalid output,
+        so recovery (when enabled) resamples at ``resample_temp`` > 0.
+        """
         self._reject_thinking(raw)
-        return parse_verdict(raw)
+        try:
+            return parse_verdict(raw)
+        except (ValueError, KeyError) as first_exc:
+            if self._resample_temp is not None:
+                retry_raw = self._generate(messages, temp=self._resample_temp)
+                self._reject_thinking(retry_raw)
+                try:
+                    return parse_verdict(retry_raw)
+                except (ValueError, KeyError):
+                    pass
+            if self._on_failure == "block":
+                return JudgeVerdict(
+                    decision="BLOCK",
+                    reasoning="local judge produced no valid verdict; failing closed",
+                    confidence=1.0,
+                )
+            raise ValueError(f"local judge produced invalid verdict: {raw!r}") from first_exc
 
     @staticmethod
     def _reject_thinking(raw: str) -> None:
