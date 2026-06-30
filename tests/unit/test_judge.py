@@ -183,3 +183,19 @@ class TestLLMJudge:
 
         # The judge's verdict comes from the model output, not the prompt's forged JSON.
         assert result.decision == "BLOCK"
+
+    def test_temperature_passed_when_set(self) -> None:
+        with patch("firewall.judge.judge.anthropic.Anthropic"):
+            judge = LLMJudge(temperature=0.0)
+        payload = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})
+        judge._client.messages.create.return_value = _mock_anthropic_response(payload)
+        judge.judge("hello", "benign", {"benign": 0.45})
+        assert judge._client.messages.create.call_args.kwargs.get("temperature") == 0.0
+
+    def test_temperature_omitted_when_none(self) -> None:
+        with patch("firewall.judge.judge.anthropic.Anthropic"):
+            judge = LLMJudge()  # default temperature=None
+        payload = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})
+        judge._client.messages.create.return_value = _mock_anthropic_response(payload)
+        judge.judge("hello", "benign", {"benign": 0.45})
+        assert "temperature" not in judge._client.messages.create.call_args.kwargs

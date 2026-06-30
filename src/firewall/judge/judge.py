@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import Any
 
 import anthropic
 
@@ -21,6 +22,7 @@ _DEFAULT_MAX_TOKENS = 512
 _DEFAULT_RETRY_COUNT = 2
 _DEFAULT_TIMEOUT_SECONDS = 10.0
 _DEFAULT_BACKOFF_BASE_SECONDS = 0.5
+_DEFAULT_TEMPERATURE: float | None = None
 
 
 class LLMJudge:
@@ -33,12 +35,14 @@ class LLMJudge:
         retry_count: int = _DEFAULT_RETRY_COUNT,
         timeout: float = _DEFAULT_TIMEOUT_SECONDS,
         backoff_base: float = _DEFAULT_BACKOFF_BASE_SECONDS,
+        temperature: float | None = _DEFAULT_TEMPERATURE,
     ) -> None:
         self._model = model
         self._max_tokens = max_tokens
         self._retry_count = retry_count
         self._timeout = timeout
         self._backoff_base = backoff_base
+        self._temperature = temperature
         self._client = anthropic.Anthropic()
 
     def judge(
@@ -63,15 +67,19 @@ class LLMJudge:
         raw: str = ""
         for attempt in range(self._retry_count + 1):
             try:
+                extra: dict[str, Any] = {}
+                if self._temperature is not None:
+                    extra["temperature"] = self._temperature
                 response = self._client.messages.create(
                     model=self._model,
                     max_tokens=self._max_tokens,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_message}],
                     timeout=self._timeout,
+                    **extra,
                 )
                 block = response.content[0]
-                raw = block.text.strip()  # type: ignore[union-attr]  # we only send text prompts; first block is always TextBlock
+                raw = block.text.strip()  # first content block is always a TextBlock
                 return parse_verdict(raw)
             except (
                 anthropic.APIError,
