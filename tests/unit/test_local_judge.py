@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from firewall.judge.base import Judge, JudgeVerdict
-from firewall.judge.local_judge import LocalJudge
+from firewall.judge.local_judge import LocalJudge, ThinkingModeError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -41,3 +41,14 @@ class TestLocalJudgeHappyPath:
 
     def test_conforms_to_judge_protocol(self) -> None:
         assert isinstance(LocalJudge("fake-model"), Judge)
+
+
+class TestLocalJudgeNonThinking:
+    def test_rejects_think_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        judge = LocalJudge("fake-model")
+        leaked = (
+            '<think>let me reason</think>\n{"decision":"PASS","reasoning":"x","confidence":0.7}'
+        )
+        monkeypatch.setattr(judge, "_generate", _fixed(leaked))
+        with pytest.raises(ThinkingModeError, match="think"):
+            judge.judge("hello", "benign", {"benign": 0.45})

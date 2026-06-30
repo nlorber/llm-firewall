@@ -19,6 +19,16 @@ _DEFAULT_MAX_TOKENS = 256
 _THINK_OPEN = "<think>"
 
 
+class ThinkingModeError(RuntimeError):
+    """Raised when a local model emits a <think> block.
+
+    The judge requires a non-thinking model (Qwen3-*-Instruct-2507, or base Qwen3 with
+    enable_thinking=False). A leaked think block corrupts both schema-validity (the JSON
+    is buried after reasoning) and the future decision-token signal (unlocatable), so we
+    fail loudly rather than silently strip it — it signals a model/template misconfig.
+    """
+
+
 class LocalJudge:
     """Judge a GRAY-zone prompt with a local MLX model (greedy, non-thinking)."""
 
@@ -50,7 +60,16 @@ class LocalJudge:
         return self._parse_or_recover(raw, messages)
 
     def _parse_or_recover(self, raw: str, messages: list[ChatMessage]) -> JudgeVerdict:
+        self._reject_thinking(raw)
         return parse_verdict(raw)
+
+    @staticmethod
+    def _reject_thinking(raw: str) -> None:
+        if _THINK_OPEN in raw:
+            raise ThinkingModeError(
+                "local model emitted a <think> block; use a non-thinking model "
+                "or set enable_thinking=False"
+            )
 
     # The methods below are the only place MLX is touched; they are exercised by the
     # integration smoke (skipped on CI), so they are excluded from unit coverage.
