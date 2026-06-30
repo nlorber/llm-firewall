@@ -7,12 +7,12 @@ from firewall.orchestrator.nodes import DEFAULT_BLOCK_THRESHOLD, DEFAULT_CLEAN_T
 
 if TYPE_CHECKING:
     from firewall.classifier.model import FirewallClassifier
-    from firewall.judge.judge import LLMJudge
+    from firewall.judge.base import Judge
 
 
 def build_graph(
     classifier: FirewallClassifier,
-    judge: LLMJudge,
+    judge: Judge,
     clean_threshold: float = DEFAULT_CLEAN_THRESHOLD,
     block_threshold: float = DEFAULT_BLOCK_THRESHOLD,
 ) -> Any:  # langgraph compiled graph has no public type; Any is appropriate here
@@ -38,9 +38,9 @@ def build_graph(
     graph = StateGraph(FirewallState)
 
     graph.add_node("classify_node", classify_node)
-    graph.add_node("judge_node",    judge_node)
-    graph.add_node("execute_node",  execute_node)
-    graph.add_node("log_node",      log_node)
+    graph.add_node("judge_node", judge_node)
+    graph.add_node("execute_node", execute_node)
+    graph.add_node("log_node", log_node)
 
     graph.set_entry_point("classify_node")
 
@@ -49,8 +49,8 @@ def build_graph(
         route_after_classify,
         {
             "execute_node": "execute_node",
-            "judge_node":   "judge_node",
-            "log_node":     "log_node",
+            "judge_node": "judge_node",
+            "log_node": "log_node",
         },
     )
     graph.add_conditional_edges(
@@ -58,10 +58,10 @@ def build_graph(
         route_after_judge,
         {
             "execute_node": "execute_node",
-            "log_node":     "log_node",
+            "log_node": "log_node",
         },
     )
     graph.add_edge("execute_node", END)
-    graph.add_edge("log_node",     END)
+    graph.add_edge("log_node", END)
 
     return graph.compile()

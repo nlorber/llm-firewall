@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from firewall.classifier.model import FirewallClassifier
-    from firewall.judge.judge import LLMJudge
+    from firewall.judge.base import Judge
 
 from firewall.orchestrator.metrics import (
     classification_label_total,
@@ -29,14 +29,14 @@ DEFAULT_BLOCK_THRESHOLD: float = 0.8
 # handling within the process is safe. It is NOT designed for hosting multiple graphs
 # with different classifiers in one process — that would require instance-scoped state.
 _classifier: FirewallClassifier | None = None
-_judge: LLMJudge | None = None
+_judge: Judge | None = None
 _clean_threshold: float = DEFAULT_CLEAN_THRESHOLD
 _block_threshold: float = DEFAULT_BLOCK_THRESHOLD
 
 
 def init_nodes(
     classifier: FirewallClassifier,
-    judge: LLMJudge,
+    judge: Judge,
     clean_threshold: float = DEFAULT_CLEAN_THRESHOLD,
     block_threshold: float = DEFAULT_BLOCK_THRESHOLD,
 ) -> None:
