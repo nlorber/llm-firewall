@@ -55,6 +55,12 @@ dev = [
     "jupyter>=1.0,<2",
     "ipykernel>=6.29,<7",
 ]
+distill = [
+    # Apple-Silicon-only: MLX fine-tuning + local inference. Darwin-marked so Linux
+    # CI lock resolution never pulls these (CI installs only the `dev` extra).
+    "mlx>=0.18; sys_platform == 'darwin'",
+    "mlx-lm>=0.20; sys_platform == 'darwin'",
+]
 
 [project.scripts]
 firewall-train      = "firewall.classifier.train:main"
@@ -91,6 +97,8 @@ module = [
     "anthropic.*",
     "matplotlib.*",
     "prometheus_client.*",
+    "mlx.*",
+    "mlx_lm.*",
 ]
 ignore_missing_imports = true
 
