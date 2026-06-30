@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from firewall.judge.base import JudgeVerdict, build_judge_messages, parse_verdict
+from firewall.judge.base import Judge, JudgeVerdict, build_judge_messages, parse_verdict
 
 
 class TestParseVerdict:
@@ -70,3 +70,20 @@ class TestBuildJudgeMessages:
         _, b1 = build_judge_messages("x", "benign", {"benign": 0.4})
         _, b2 = build_judge_messages("x", "benign", {"benign": 0.4})
         assert b1 != b2
+
+
+class TestJudgeProtocol:
+    def test_object_with_matching_method_is_a_judge(self) -> None:
+        class _Stub:
+            def judge(
+                self, prompt: str, classification_label: str, scores: dict[str, float]
+            ) -> JudgeVerdict:
+                return JudgeVerdict("PASS", "ok", 1.0)
+
+        assert isinstance(_Stub(), Judge)
+
+    def test_object_without_judge_method_is_not_a_judge(self) -> None:
+        class _NotAJudge:
+            def evaluate(self) -> None: ...
+
+        assert not isinstance(_NotAJudge(), Judge)

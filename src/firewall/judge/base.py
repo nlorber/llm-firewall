@@ -12,7 +12,7 @@ import json
 import re
 import secrets
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Protocol, TypedDict, runtime_checkable
 
 
 @dataclass
@@ -22,6 +22,22 @@ class JudgeVerdict:
     decision: str  # "PASS" | "BLOCK"
     reasoning: str
     confidence: float
+
+
+@runtime_checkable
+class Judge(Protocol):
+    """Structural interface every judge backend satisfies.
+
+    LLMJudge (Claude), LocalJudge (MLX), and TieredJudge all implement this, so the
+    orchestrator can hold a Judge without knowing which backend it is.
+    """
+
+    def judge(
+        self,
+        prompt: str,
+        classification_label: str,
+        scores: dict[str, float],
+    ) -> JudgeVerdict: ...
 
 
 # Matches an optional ```json ... ``` fence so models that wrap their JSON in
