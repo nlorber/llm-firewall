@@ -22,6 +22,8 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+data/distill/*
+!data/distill/.gitkeep
 models/*
 !models/.gitkeep
 *.pt
