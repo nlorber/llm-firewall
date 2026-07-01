@@ -11,11 +11,13 @@ from firewall.judge.distill.data import (
     GrayCandidate,
     build_corpus,
     classify_and_filter_gray,
+    generate_benign_gray,
     generate_borderline,
     generate_coercion,
     load_raw_candidates,
     stratified_split_by_decision,
     teacher_label,
+    topup_corpus,
 )
 
 if TYPE_CHECKING:
@@ -112,6 +114,13 @@ def test_generate_coercion_tags_coercion() -> None:
     assert len(out) == 2
 
 
+def test_generate_benign_gray_tags_benign_gray() -> None:
+    client = _mock_client([["safe1", "safe2"]])
+    out = generate_benign_gray(client, model="m", n=2, batch_size=2)
+    assert all(c.provenance == "benign_gray" for c in out)
+    assert len(out) == 2
+
+
 class _FakeJudge:
     """Returns a fixed verdict per prompt text."""
 
@@ -185,3 +194,58 @@ def test_build_corpus_writes_splits_and_caps(tmp_path: Path) -> None:
     assert (cfg.output_dir / "test.jsonl").exists()
     assert (cfg.output_dir / "manifest.json").exists()
     assert counts["train"] + counts["val"] + counts["test"] == 8
+
+
+def _rec(text: str, decision: str, provenance: str) -> dict[str, object]:
+    return {
+        "messages": [],
+        "meta": {
+            "text": text,
+            "provenance": provenance,
+            "decision": decision,
+            "classifier_label": "injection",
+            "scores": {"benign": 0.4, "injection": 0.5},
+        },
+    }
+
+
+def test_topup_corpus_appends_benign_gray_and_resplits(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    # Existing labeled corpus (6 BLOCK gen, 6 PASS coercion) spread across the three splits.
+    existing = [_rec(f"b{i}", "BLOCK", "gen") for i in range(6)]
+    existing += [_rec(f"p{i}", "PASS", "coercion") for i in range(6)]
+    (out / "train.jsonl").write_text("\n".join(json.dumps(r) for r in existing[:8]) + "\n")
+    (out / "val.jsonl").write_text("\n".join(json.dumps(r) for r in existing[8:10]) + "\n")
+    (out / "test.jsonl").write_text("\n".join(json.dumps(r) for r in existing[10:]) + "\n")
+
+    cfg = DistillConfig(
+        raw_dir=tmp_path / "raw",
+        output_dir=out,
+        clean_threshold=0.3,
+        block_threshold=0.8,
+        classifier_path="x",
+        classifier_max_length=512,
+        generation_model="m",
+        teacher_model="m",
+        teacher_temperature=0.0,
+        target_gray_total=8,
+        n_generated_borderline=0,
+        n_generated_coercion=0,
+        generation_batch_size=4,
+        val_ratio=0.25,
+        test_ratio=0.25,
+        seed=42,
+        n_generated_benign_gray=4,
+    )
+    safe = ["safe1", "safe2", "safe3", "safe4"]
+    clf = _FakeClassifier({t: {"benign": 0.5, "injection": 0.5} for t in safe})  # all GRAY
+    client = _mock_client([safe])
+    judge = _FakeJudge({t: JudgeVerdict("PASS", "benign but flagged", 0.7) for t in safe})
+
+    manifest = topup_corpus(cfg, clf, judge, client)
+    assert manifest["added_benign_gray"] == 4
+    assert manifest["gray_total"] == 16  # 12 existing + 4 new
+    assert manifest["by_provenance"]["benign_gray"] == 4
+    assert manifest["by_decision"] == {"BLOCK": 6, "PASS": 10}
+    assert manifest["train"] + manifest["val"] + manifest["test"] == 16

@@ -30,6 +30,9 @@ class DistillConfig:
     test_ratio: float
     seed: int
 
+    # Benign-gray top-up slice (make distill-topup). Optional/defaulted for build-only configs.
+    n_generated_benign_gray: int = 0
+
     # --- Eval fields (Plan 4). Optional/defaulted so an existing build config still loads. ---
     reports_dir: Path = Path("reports")
     baseline_local_models: tuple[str, ...] = ()
@@ -58,6 +61,7 @@ def load_distill_config(path: str | Path) -> DistillConfig:
         val_ratio=float(data["val_ratio"]),
         test_ratio=float(data["test_ratio"]),
         seed=int(data["seed"]),
+        n_generated_benign_gray=int(data.get("n_generated_benign_gray", 0)),
         reports_dir=Path(data.get("reports_dir", "reports")),
         baseline_local_models=tuple(data.get("baseline_local_models", ())),
         local_baseline_max_tokens=int(data.get("local_baseline_max_tokens", 256)),

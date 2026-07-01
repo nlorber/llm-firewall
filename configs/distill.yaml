@@ -28,8 +28,13 @@ n_generated_coercion: 2000
 generation_batch_size: 20
 
 val_ratio: 0.15
-test_ratio: 0.15
+test_ratio: 0.20  # raised from 0.15 in the benign-gray top-up: more PASS in test for CIs
 seed: 42
+
+# Benign-gray top-up (make distill-topup): benign prompts wearing attack-surface features,
+# to enrich the rare GRAY-band PASS cell. Yield is ~3% (classifier routes most benign to
+# CLEAN), so we over-generate to add ~110 PASS. Reuses the existing labeled 340; re-splits.
+n_generated_benign_gray: 3400
 
 # --- Eval (make distill-eval): baselines run BEFORE training on data/distill/test.jsonl ---
 reports_dir: "reports"
