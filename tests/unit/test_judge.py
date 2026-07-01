@@ -19,10 +19,18 @@ class _MockAPIError(anthropic.APIError):
         Exception.__init__(self, message)
 
 
-def _mock_anthropic_response(content: str) -> MagicMock:
-    """Build a fake anthropic.messages.create() return value."""
+def _mock_anthropic_response(
+    content: str, input_tokens: int | None = None, output_tokens: int | None = None
+) -> MagicMock:
+    """Build a fake anthropic.messages.create() return value.
+
+    Token usage is only set when explicitly requested, so the existing tests exercise the
+    defensive zero-usage path (a bare MagicMock's ``usage.input_tokens`` is not an int).
+    """
     msg = MagicMock()
     msg.content = [MagicMock(text=content)]
+    if input_tokens is not None or output_tokens is not None:
+        msg.usage = MagicMock(input_tokens=input_tokens, output_tokens=output_tokens)
     return msg
 
 
@@ -199,3 +207,19 @@ class TestLLMJudge:
         judge._client.messages.create.return_value = _mock_anthropic_response(payload)
         judge.judge("hello", "benign", {"benign": 0.45})
         assert "temperature" not in judge._client.messages.create.call_args.kwargs
+
+    def test_judge_verbose_returns_raw_and_usage(self, judge: LLMJudge) -> None:
+        payload = json.dumps({"decision": "BLOCK", "reasoning": "bad", "confidence": 0.9})
+        judge._client.messages.create.return_value = _mock_anthropic_response(
+            payload, input_tokens=321, output_tokens=42
+        )
+        verdict, raw, usage = judge.judge_verbose("x", "injection", {"injection": 0.55})
+        assert verdict.decision == "BLOCK"
+        assert json.loads(raw)["decision"] == "BLOCK"
+        assert usage == {"input_tokens": 321, "output_tokens": 42}
+
+    def test_judge_verbose_usage_defaults_to_zero_without_usage(self, judge: LLMJudge) -> None:
+        payload = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})
+        judge._client.messages.create.return_value = _mock_anthropic_response(payload)
+        _verdict, _raw, usage = judge.judge_verbose("hi", "benign", {"benign": 0.45})
+        assert usage == {"input_tokens": 0, "output_tokens": 0}

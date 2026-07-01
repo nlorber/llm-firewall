@@ -24,6 +24,8 @@ data/processed/*
 !data/processed/.gitkeep
 data/distill/*
 !data/distill/.gitkeep
+# Generated distillation eval reports (regenerated after training; final numbers go in docs)
+reports/distill_eval_*
 models/*
 !models/.gitkeep
 *.pt

@@ -33,3 +33,38 @@ seed: 42
     assert cfg.target_gray_total == 1200
     assert cfg.teacher_temperature == 0.0
     assert cfg.seed == 42
+
+
+def test_eval_fields_default_when_absent(tmp_path: Path) -> None:
+    # A build-only config (no eval keys) still loads; eval fields fall back to defaults.
+    path = tmp_path / "distill.yaml"
+    path.write_text(
+        "raw_dir: data/raw\noutput_dir: data/distill\nclean_threshold: 0.3\n"
+        "block_threshold: 0.8\nclassifier_path: models/classifier\nclassifier_max_length: 512\n"
+        "generation_model: m\nteacher_model: m\nteacher_temperature: 0.0\n"
+        "target_gray_total: 10\nn_generated_borderline: 5\nn_generated_coercion: 5\n"
+        "generation_batch_size: 5\nval_ratio: 0.15\ntest_ratio: 0.15\nseed: 42\n"
+    )
+    cfg = load_distill_config(path)
+    assert cfg.reports_dir == Path("reports")
+    assert cfg.baseline_local_models == ()
+    assert cfg.local_baseline_max_tokens == 256
+    assert cfg.claude_price_in_per_mtok == 1.0
+
+
+def test_eval_fields_parsed_when_present(tmp_path: Path) -> None:
+    path = tmp_path / "distill.yaml"
+    path.write_text(
+        "raw_dir: data/raw\noutput_dir: data/distill\nclean_threshold: 0.3\n"
+        "block_threshold: 0.8\nclassifier_path: models/classifier\nclassifier_max_length: 512\n"
+        "generation_model: m\nteacher_model: m\nteacher_temperature: 0.0\n"
+        "target_gray_total: 10\nn_generated_borderline: 5\nn_generated_coercion: 5\n"
+        "generation_batch_size: 5\nval_ratio: 0.15\ntest_ratio: 0.15\nseed: 42\n"
+        'reports_dir: out\nbaseline_local_models: ["a", "b"]\nlocal_baseline_max_tokens: 128\n'
+        "claude_price_in_per_mtok: 0.8\nclaude_price_out_per_mtok: 4.0\n"
+    )
+    cfg = load_distill_config(path)
+    assert cfg.reports_dir == Path("out")
+    assert cfg.baseline_local_models == ("a", "b")
+    assert cfg.local_baseline_max_tokens == 128
+    assert cfg.claude_price_out_per_mtok == 4.0

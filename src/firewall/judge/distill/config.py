@@ -30,6 +30,13 @@ class DistillConfig:
     test_ratio: float
     seed: int
 
+    # --- Eval fields (Plan 4). Optional/defaulted so an existing build config still loads. ---
+    reports_dir: Path = Path("reports")
+    baseline_local_models: tuple[str, ...] = ()
+    local_baseline_max_tokens: int = 256
+    claude_price_in_per_mtok: float = 1.0
+    claude_price_out_per_mtok: float = 5.0
+
 
 def load_distill_config(path: str | Path) -> DistillConfig:
     """Parse a distill YAML config into a DistillConfig."""
@@ -51,4 +58,9 @@ def load_distill_config(path: str | Path) -> DistillConfig:
         val_ratio=float(data["val_ratio"]),
         test_ratio=float(data["test_ratio"]),
         seed=int(data["seed"]),
+        reports_dir=Path(data.get("reports_dir", "reports")),
+        baseline_local_models=tuple(data.get("baseline_local_models", ())),
+        local_baseline_max_tokens=int(data.get("local_baseline_max_tokens", 256)),
+        claude_price_in_per_mtok=float(data.get("claude_price_in_per_mtok", 1.0)),
+        claude_price_out_per_mtok=float(data.get("claude_price_out_per_mtok", 5.0)),
     )

@@ -1,4 +1,4 @@
-.PHONY: setup train evaluate distill-data serve test lint format clean docker-build
+.PHONY: setup train evaluate distill-data distill-eval serve test lint format clean docker-build
 
 ## Install all dependencies with uv and set up pre-commit hooks
 setup:
@@ -16,6 +16,10 @@ evaluate:
 ## Build the distillation corpus (reads configs/distill.yaml; needs ANTHROPIC_API_KEY + classifier)
 distill-data:
 	uv run python -m firewall.judge.distill.data --config configs/distill.yaml
+
+## Eval baselines on data/distill/test.jsonl (Claude + base MLX models; writes reports/)
+distill-eval:
+	uv run python -m firewall.judge.distill.eval --config configs/distill.yaml
 
 ## Start the FastAPI inference server (reads host/port/log_level from configs/serving.yaml)
 serve:

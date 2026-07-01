@@ -56,6 +56,20 @@ class LLMJudge:
         Raises:
             ValueError: If all retries fail (API or parse errors).
         """
+        verdict, _raw, _usage = self.judge_verbose(prompt, classification_label, scores)
+        return verdict
+
+    def judge_verbose(
+        self,
+        prompt: str,
+        classification_label: str,
+        scores: dict[str, float],
+    ) -> tuple[JudgeVerdict, str, dict[str, int]]:
+        """Judge and also return the raw response text and token usage.
+
+        Used by the distillation eval harness for the reference row's real cost/latency;
+        ``judge`` is the thin wrapper. Same retry/parse semantics as before.
+        """
         # Shared builder = single source of truth for what the judge sees. The
         # attacker-controlled prompt is sealed in a per-call nonce tag; the system
         # prompt tells the judge to treat the tagged content strictly as data.
@@ -80,7 +94,7 @@ class LLMJudge:
                 )
                 block = response.content[0]
                 raw = block.text.strip()  # first content block is always a TextBlock
-                return parse_verdict(raw)
+                return parse_verdict(raw), raw, _usage_of(response)
             except (
                 anthropic.APIError,
                 json.JSONDecodeError,
@@ -100,3 +114,18 @@ class LLMJudge:
             f"failed to obtain judge verdict after {self._retry_count + 1} attempts. "
             f"Last response: {raw!r}. Last error: {last_exc}"
         )
+
+
+def _usage_of(response: Any) -> dict[str, int]:
+    """Extract input/output token counts, defaulting to 0 when absent or non-integer.
+
+    Read defensively so a bare ``MagicMock`` response (unit tests) yields zeros rather
+    than crashing; real Anthropic responses carry integer ``usage.{input,output}_tokens``.
+    """
+    usage = getattr(response, "usage", None)
+    in_tok = getattr(usage, "input_tokens", 0)
+    out_tok = getattr(usage, "output_tokens", 0)
+    return {
+        "input_tokens": in_tok if isinstance(in_tok, int) else 0,
+        "output_tokens": out_tok if isinstance(out_tok, int) else 0,
+    }

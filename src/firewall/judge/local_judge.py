@@ -59,6 +59,21 @@ class LocalJudge:
         raw = self._generate(messages, temp=0.0)
         return self._parse_or_recover(raw, messages)
 
+    def generate_raw(
+        self,
+        prompt: str,
+        classification_label: str,
+        scores: dict[str, float],
+    ) -> str:
+        """Return the single greedy generation — no thinking check, no parse, no recovery.
+
+        The eval harness needs the model's *actual* output to measure schema-validity
+        before any repair; the no-`<think>` assertion and PASS/BLOCK parsing are policies
+        that belong to the caller, so this stays a clean "give me the greedy output" seam.
+        """
+        messages, _boundary = build_judge_messages(prompt, classification_label, scores)
+        return self._generate(messages, temp=0.0)
+
     def _parse_or_recover(self, raw: str, messages: list[ChatMessage]) -> JudgeVerdict:
         """Parse the greedy output; on schema failure optionally resample once, then
         apply the failure policy. A temp-0 retry would reproduce identical invalid output,

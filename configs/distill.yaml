@@ -30,3 +30,15 @@ generation_batch_size: 20
 val_ratio: 0.15
 test_ratio: 0.15
 seed: 42
+
+# --- Eval (make distill-eval): baselines run BEFORE training on data/distill/test.jsonl ---
+reports_dir: "reports"
+# Base (un-fine-tuned) MLX models to prompt as baselines. Empty on CI (no MLX); the run
+# on the Mac fills these in. 1.7B is hybrid -> LocalJudge sets enable_thinking=False.
+baseline_local_models:
+  - "mlx-community/Qwen3-1.7B-4bit"
+  - "mlx-community/Qwen3-4B-Instruct-2507-4bit"
+local_baseline_max_tokens: 256
+# Claude Haiku 4.5 per-million-token prices — VERIFY against current Anthropic pricing.
+claude_price_in_per_mtok: 1.0
+claude_price_out_per_mtok: 5.0

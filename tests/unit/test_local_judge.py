@@ -43,6 +43,18 @@ class TestLocalJudgeHappyPath:
         assert isinstance(LocalJudge("fake-model"), Judge)
 
 
+class TestLocalJudgeGenerateRaw:
+    def test_generate_raw_returns_output_verbatim(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No parse, no thinking-check, no recovery — even a leaked think block or garbage
+        # comes straight back so the eval layer can score schema-validity itself.
+        judge = LocalJudge("fake-model")
+        monkeypatch.setattr(judge, "_generate", _fixed("<think>hmm</think> not json"))
+        assert (
+            judge.generate_raw("x", "injection", {"injection": 0.5})
+            == "<think>hmm</think> not json"
+        )
+
+
 class TestLocalJudgeNonThinking:
     def test_rejects_think_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
         judge = LocalJudge("fake-model")
