@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from firewall.judge.base import Judge, JudgeVerdict
-from firewall.judge.local_judge import LocalJudge, ThinkingModeError
+from firewall.judge.local_judge import LocalJudge, ThinkingModeError, strip_and_check_thinking
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -55,8 +55,17 @@ class TestLocalJudgeGenerateRaw:
         )
 
 
+class TestLocalJudgeAdapter:
+    def test_load_kwargs_omits_adapter_when_none(self) -> None:
+        assert LocalJudge("base")._load_kwargs() == {}
+
+    def test_load_kwargs_forwards_adapter_when_set(self) -> None:
+        judge = LocalJudge("base", adapter_path="adapters/qwen3-1.7b")
+        assert judge._load_kwargs() == {"adapter_path": "adapters/qwen3-1.7b"}
+
+
 class TestLocalJudgeNonThinking:
-    def test_rejects_think_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_rejects_non_empty_think_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
         judge = LocalJudge("fake-model")
         leaked = (
             '<think>let me reason</think>\n{"decision":"PASS","reasoning":"x","confidence":0.7}'
@@ -64,6 +73,22 @@ class TestLocalJudgeNonThinking:
         monkeypatch.setattr(judge, "_generate", _fixed(leaked))
         with pytest.raises(ThinkingModeError, match="think"):
             judge.judge("hello", "benign", {"benign": 0.45})
+
+    def test_tolerates_empty_think_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Qwen3-4B-Instruct fine-tunes reproduce the template's empty <think></think> in the
+        # output; it is scaffolding, not reasoning, so it is stripped and the JSON still parses.
+        judge = LocalJudge("fake-model")
+        payload = (
+            '<think>\n\n</think>\n\n{"decision": "BLOCK", "reasoning": "x", "confidence": 0.8}'
+        )
+        monkeypatch.setattr(judge, "_generate", _fixed(payload))
+        assert judge.judge("x", "injection", {"injection": 0.5}).decision == "BLOCK"
+
+    def test_strip_and_check_thinking_helper(self) -> None:
+        assert strip_and_check_thinking('<think>\n\n</think>\n\n{"x": 1}') == '{"x": 1}'
+        assert strip_and_check_thinking('{"x": 1}') == '{"x": 1}'
+        with pytest.raises(ThinkingModeError):
+            strip_and_check_thinking("<think>real reasoning</think>{}")
 
 
 class TestLocalJudgeFailureModes:

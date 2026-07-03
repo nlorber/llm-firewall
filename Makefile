@@ -1,4 +1,4 @@
-.PHONY: setup train evaluate distill-data distill-topup distill-eval serve test lint format clean docker-build
+.PHONY: setup train evaluate distill-data distill-topup distill-train-1.7b distill-train-4b distill-eval serve test lint format clean docker-build
 
 ## Install all dependencies with uv and set up pre-commit hooks
 setup:
@@ -20,6 +20,14 @@ distill-data:
 ## Add a benign-gray PASS slice to the corpus and re-split (reads configs/distill.yaml)
 distill-topup:
 	uv run python -m firewall.judge.distill.data --config configs/distill.yaml --topup
+
+## QLoRA-fine-tune Qwen3-1.7B on the corpus (prepares data/distill/mlx, then mlx_lm.lora)
+distill-train-1.7b:
+	uv run python -m firewall.judge.distill.train --config configs/distill_train_1.7b.yaml
+
+## QLoRA-fine-tune Qwen3-4B-Instruct-2507 on the corpus
+distill-train-4b:
+	uv run python -m firewall.judge.distill.train --config configs/distill_train_4b.yaml
 
 ## Eval baselines on data/distill/test.jsonl (Claude + base MLX models; writes reports/)
 distill-eval:

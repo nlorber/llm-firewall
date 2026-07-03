@@ -31,7 +31,7 @@ from firewall.judge.distill.metrics import (
     token_cost_usd,
     wilson_ci,
 )
-from firewall.judge.local_judge import ThinkingModeError
+from firewall.judge.local_judge import strip_and_check_thinking
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     from firewall.judge.judge import LLMJudge
     from firewall.judge.local_judge import LocalJudge
 
-_THINK_OPEN = "<think>"
 _INVALID = "INVALID"
 
 
@@ -208,20 +207,17 @@ def run_claude_fn(judge: LLMJudge) -> RunFn:  # pragma: no cover
 def run_local_fn(judge: LocalJudge) -> RunFn:  # pragma: no cover
     """A RunFn that times ``generate_raw`` and parses without repair.
 
-    A leaked ``<think>`` block aborts the whole run (hard assertion): it means
-    schema-validity would be measuring thinking-leak, not model quality.
+    A benign empty ``<think></think>`` is stripped; a NON-empty think block aborts the whole
+    run (hard assertion) — real reasoning leakage would make schema-validity measure the
+    wrong thing.
     """
 
     def _run(text: str, label: str, scores: dict[str, float]) -> Outcome:
         start = time.perf_counter()
         raw = judge.generate_raw(text, label, scores)
         latency = time.perf_counter() - start
-        if _THINK_OPEN in raw:
-            raise ThinkingModeError(
-                "local model emitted a <think> block during eval; use a non-thinking model"
-            )
         try:
-            verdict = parse_verdict(raw)
+            verdict = parse_verdict(strip_and_check_thinking(raw))
         except (ValueError, KeyError):
             return Outcome(_INVALID, False, latency)
         return Outcome(predicted=verdict.decision, valid=True, latency_s=latency)
@@ -272,6 +268,18 @@ def main() -> None:  # pragma: no cover
         local = LocalJudge(model_path, max_tokens=config.local_baseline_max_tokens)
         local_runs = run_all(run_local_fn(local), records)
         reports.append(build_report(f"base {model_path}", local_runs, 0.0, 0.0))
+
+    # Fine-tuned judges (base + LoRA adapter). Skip any whose adapter has not been trained yet.
+    for fm in config.finetuned_local_models:
+        if not Path(fm.adapter_path).exists():
+            print(f"[distill-eval] skipping {fm.name}: no adapter at {fm.adapter_path}")
+            continue
+        print(f"[distill-eval] running {fm.name} (base {fm.base} + adapter)...")
+        finetuned = LocalJudge(
+            fm.base, max_tokens=config.local_baseline_max_tokens, adapter_path=fm.adapter_path
+        )
+        finetuned_runs = run_all(run_local_fn(finetuned), records)
+        reports.append(build_report(fm.name, finetuned_runs, 0.0, 0.0))
 
     config.reports_dir.mkdir(parents=True, exist_ok=True)
     stamp = date.today().isoformat()

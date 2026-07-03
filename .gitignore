@@ -26,6 +26,8 @@ data/distill/*
 !data/distill/.gitkeep
 # Generated distillation eval reports (regenerated after training; final numbers go in docs)
 reports/distill_eval_*
+# LoRA training outputs (checkpoint churn); a final showcase adapter is force-added later
+adapters/
 models/*
 !models/.gitkeep
 *.pt

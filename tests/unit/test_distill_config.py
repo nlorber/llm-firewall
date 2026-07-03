@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from firewall.judge.distill.config import DistillConfig, load_distill_config
+from firewall.judge.distill.config import DistillConfig, FinetunedModel, load_distill_config
 
 
 def test_loads_all_fields(tmp_path: Path) -> None:
@@ -68,3 +68,23 @@ def test_eval_fields_parsed_when_present(tmp_path: Path) -> None:
     assert cfg.baseline_local_models == ("a", "b")
     assert cfg.local_baseline_max_tokens == 128
     assert cfg.claude_price_out_per_mtok == 4.0
+    assert cfg.finetuned_local_models == ()
+
+
+def test_finetuned_models_parsed(tmp_path: Path) -> None:
+    path = tmp_path / "distill.yaml"
+    path.write_text(
+        "raw_dir: data/raw\noutput_dir: data/distill\nclean_threshold: 0.3\n"
+        "block_threshold: 0.8\nclassifier_path: models/classifier\nclassifier_max_length: 512\n"
+        "generation_model: m\nteacher_model: m\nteacher_temperature: 0.0\n"
+        "target_gray_total: 10\nn_generated_borderline: 5\nn_generated_coercion: 5\n"
+        "generation_batch_size: 5\nval_ratio: 0.15\ntest_ratio: 0.15\nseed: 42\n"
+        "finetuned_local_models:\n"
+        '  - {name: "ft 1.7B", base: "mlx-community/Qwen3-1.7B-4bit", adapter_path: "adapters/a"}\n'
+    )
+    cfg = load_distill_config(path)
+    assert cfg.finetuned_local_models == (
+        FinetunedModel(
+            name="ft 1.7B", base="mlx-community/Qwen3-1.7B-4bit", adapter_path="adapters/a"
+        ),
+    )

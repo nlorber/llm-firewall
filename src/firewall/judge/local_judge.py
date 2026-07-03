@@ -8,6 +8,7 @@ Apple-Silicon path is exercised only by the integration smoke.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any, Literal
 
 from firewall.judge.base import JudgeVerdict, build_judge_messages, parse_verdict
@@ -17,16 +18,35 @@ if TYPE_CHECKING:
 
 _DEFAULT_MAX_TOKENS = 256
 _THINK_OPEN = "<think>"
+# A leading EMPTY think block — the Qwen3 chat template emits `<think>\n\n</think>` as
+# structural scaffolding. Some fine-tuned checkpoints (e.g. Qwen3-4B-Instruct, whose
+# template puts the block in the training target but not the generation prompt) reproduce
+# it in their output; it is a benign artifact, not reasoning, so we strip rather than reject.
+_EMPTY_THINK_RE = re.compile(r"^\s*<think>\s*</think>\s*", re.DOTALL)
 
 
 class ThinkingModeError(RuntimeError):
-    """Raised when a local model emits a <think> block.
+    """Raised when a local model emits a NON-empty <think> block (real reasoning leakage).
 
-    The judge requires a non-thinking model (Qwen3-*-Instruct-2507, or base Qwen3 with
-    enable_thinking=False). A leaked think block corrupts both schema-validity (the JSON
-    is buried after reasoning) and the future decision-token signal (unlocatable), so we
-    fail loudly rather than silently strip it — it signals a model/template misconfig.
+    The judge requires a non-thinking model. Actual reasoning inside a think block buries
+    the JSON behind an unbounded prefix, corrupting schema-validity and the decision-token
+    signal, so we fail loudly. An *empty* ``<think></think>`` is a template artifact and is
+    stripped instead (see :func:`strip_and_check_thinking`).
     """
+
+
+def strip_and_check_thinking(raw: str) -> str:
+    """Strip a leading empty ``<think></think>`` block; raise on a non-empty one.
+
+    Returns the output with the benign empty block removed so the JSON parses; a think
+    block containing any non-whitespace content is real reasoning leakage → ThinkingModeError.
+    """
+    stripped = _EMPTY_THINK_RE.sub("", raw, count=1)
+    if _THINK_OPEN in stripped:
+        raise ThinkingModeError(
+            "local model emitted a non-empty <think> block; use a non-thinking model"
+        )
+    return stripped
 
 
 class LocalJudge:
@@ -39,14 +59,24 @@ class LocalJudge:
         enable_thinking: bool = False,
         on_failure: Literal["raise", "block"] = "raise",
         resample_temp: float | None = None,
+        adapter_path: str | None = None,
     ) -> None:
         self._model_path = model_path
         self._max_tokens = max_tokens
         self._enable_thinking = enable_thinking
         self._on_failure = on_failure
         self._resample_temp = resample_temp
+        self._adapter_path = adapter_path  # base + LoRA adapter (fine-tuned); None = base only
         self._model: Any = None
         self._tokenizer: Any = None
+
+    def _load_kwargs(self) -> dict[str, Any]:
+        """Kwargs for ``mlx_lm.load`` — forward ``adapter_path`` only when set so the base
+        model still loads exactly as before (backward-compatible)."""
+        kwargs: dict[str, Any] = {}
+        if self._adapter_path is not None:
+            kwargs["adapter_path"] = self._adapter_path
+        return kwargs
 
     def judge(
         self,
@@ -79,15 +109,13 @@ class LocalJudge:
         apply the failure policy. A temp-0 retry would reproduce identical invalid output,
         so recovery (when enabled) resamples at ``resample_temp`` > 0.
         """
-        self._reject_thinking(raw)
         try:
-            return parse_verdict(raw)
+            return parse_verdict(strip_and_check_thinking(raw))
         except (ValueError, KeyError) as first_exc:
             if self._resample_temp is not None:
                 retry_raw = self._generate(messages, temp=self._resample_temp)
-                self._reject_thinking(retry_raw)
                 try:
-                    return parse_verdict(retry_raw)
+                    return parse_verdict(strip_and_check_thinking(retry_raw))
                 except (ValueError, KeyError):
                     pass
             if self._on_failure == "block":
@@ -97,14 +125,6 @@ class LocalJudge:
                     confidence=1.0,
                 )
             raise ValueError(f"local judge produced invalid verdict: {raw!r}") from first_exc
-
-    @staticmethod
-    def _reject_thinking(raw: str) -> None:
-        if _THINK_OPEN in raw:
-            raise ThinkingModeError(
-                "local model emitted a <think> block; use a non-thinking model "
-                "or set enable_thinking=False"
-            )
 
     # The methods below are the only place MLX is touched; they are exercised by the
     # integration smoke (skipped on CI), so they are excluded from unit coverage.
@@ -133,5 +153,5 @@ class LocalJudge:
         if self._model is None:
             from mlx_lm import load
 
-            loaded = load(self._model_path)
+            loaded = load(self._model_path, **self._load_kwargs())
             self._model, self._tokenizer = loaded[0], loaded[1]

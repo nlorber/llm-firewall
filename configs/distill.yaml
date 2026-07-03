@@ -47,3 +47,13 @@ local_baseline_max_tokens: 256
 # Claude Haiku 4.5 per-million-token prices — VERIFY against current Anthropic pricing.
 claude_price_in_per_mtok: 1.0
 claude_price_out_per_mtok: 5.0
+
+# Fine-tuned judges (base + LoRA adapter). Eval skips any whose adapter dir is absent, so
+# both can be listed before the 4B is trained.
+finetuned_local_models:
+  - name: "finetuned Qwen3-1.7B"
+    base: "mlx-community/Qwen3-1.7B-4bit"
+    adapter_path: "adapters/qwen3-1.7b"
+  - name: "finetuned Qwen3-4B-Instruct-2507"
+    base: "mlx-community/Qwen3-4B-Instruct-2507-4bit"
+    adapter_path: "adapters/qwen3-4b"

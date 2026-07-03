@@ -10,6 +10,15 @@ import yaml
 
 
 @dataclass(frozen=True)
+class FinetunedModel:
+    """A fine-tuned local judge to eval: a base model plus its LoRA adapter."""
+
+    name: str
+    base: str
+    adapter_path: str
+
+
+@dataclass(frozen=True)
 class DistillConfig:
     """All parameters for a distillation corpus build."""
 
@@ -39,6 +48,7 @@ class DistillConfig:
     local_baseline_max_tokens: int = 256
     claude_price_in_per_mtok: float = 1.0
     claude_price_out_per_mtok: float = 5.0
+    finetuned_local_models: tuple[FinetunedModel, ...] = ()
 
 
 def load_distill_config(path: str | Path) -> DistillConfig:
@@ -67,4 +77,8 @@ def load_distill_config(path: str | Path) -> DistillConfig:
         local_baseline_max_tokens=int(data.get("local_baseline_max_tokens", 256)),
         claude_price_in_per_mtok=float(data.get("claude_price_in_per_mtok", 1.0)),
         claude_price_out_per_mtok=float(data.get("claude_price_out_per_mtok", 5.0)),
+        finetuned_local_models=tuple(
+            FinetunedModel(name=m["name"], base=m["base"], adapter_path=m["adapter_path"])
+            for m in data.get("finetuned_local_models", ())
+        ),
     )
