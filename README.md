@@ -38,7 +38,7 @@ flowchart LR
 
     subgraph LangGraph
         CLS[classify_node<br/>DeBERTa ~10ms]
-        JDG[judge_node<br/>Claude ~500ms]
+        JDG[judge_node<br/>claude · local SLM · tiered]
         EXE[execute_node]
         LOG[log_node]
     end
@@ -52,6 +52,10 @@ flowchart LR
     EXE --> PASS[PASS]
     LOG --> BLOCK[BLOCK + audit log]
 ```
+
+The `judge_node` backend is configurable (`judge_backend` in `configs/orchestrator.yaml`,
+default `claude`). The `tiered` backend runs a distilled local SLM first and escalates only
+uncertain verdicts to Claude — see [Local Judge (distilled SLM)](#local-judge-distilled-slm).
 
 ## Results
 
@@ -148,6 +152,60 @@ The classifier is evaluated against 20 adversarial prompts spanning 8 attack cat
 - **SHAP explainability for audit** — token-level attribution on flagged prompts. _When the classifier blocks a legitimate prompt, support needs to explain why. SHAP runs in ~2-5 seconds — acceptable for post-hoc audit, not inference._
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the full technical deep-dive.
+
+## Local Judge (distilled SLM)
+
+The gray-zone judge doesn't have to be a cloud API call. The Claude judge was **distilled**
+into a local fine-tuned Qwen3 (QLoRA via Apple MLX) and composed as a **tiered** judge:
+run the local model first, and escalate only the *uncertain* verdicts to Claude. The result
+is a selectable `judge_backend` (`claude` default · `local` · `tiered`) — the evaluated
+engineering decision, not just "I fine-tuned a model." See [docs/CONCEPTS.md](docs/CONCEPTS.md)
+for the techniques and [docs/DECISIONS.md](docs/DECISIONS.md) for every trade-off.
+
+**Three configurations, honestly compared:**
+
+| Backend | Privacy / offline | Accuracy | Cost / latency | Failure mode |
+|---|---|---|---|---|
+| `claude` | none — every gray prompt leaves the machine | full (the teacher) | API $ per call; ~1.7 s | 500 / error |
+| `local` | **full** — nothing leaves | reduced (no teacher recovery) | ~$0, on-device | fail-closed → BLOCK |
+| `tiered` | **partial** — leaks at the escalation rate (the most uncertain prompts are exactly the ones sent to Claude) | recovered toward the teacher | blended: ~$0 + Claude $ × escalation; slower than Claude | escalate; else 500 |
+
+`tiered` does **not** give the privacy/offline guarantee — only `local` does; the leakage is
+the escalation rate, stated head-on.
+
+**Key Numbers** (distilled judge, test split N=90 = 64 BLOCK / 26 PASS; agreement with the
+Claude teacher, with the always-BLOCK failure mode visible in *Benign-PASS*):
+
+| Judge | Decision-match | BLOCK recall | Benign-PASS | Schema-valid | Latency p50 | Cost/call |
+|---|---|---|---|---|---|---|
+| Claude (teacher) | 98.9% | 98.4% | 100% | 100% | 1.69 s | $0.00086 |
+| base Qwen3-1.7B | 66.7% | 90.6% | 7.7% | 96.7% | 1.6 s | $0 |
+| base Qwen3-4B | 72.2% | 81.2% | 50.0% | 100% | 1.6 s | $0 |
+| fine-tuned 1.7B | 70.0% | 98.4% | **0.0%** (collapsed) | 98.9% | 2.5 s | $0 |
+| fine-tuned 4B | 78.9% | 98.4% | 30.8% | 100% | 3.1 s | $0 |
+| **tiered (4B, τ=0.5)** | **94.4%** | **98.4%** | **84.6%** | 100% | 2.4 s | **$0.00036** |
+
+**The evaluated decision — is it worth it?** Yes, *as a tiered system*. Escalating the
+uncertain **42%** of gray-zone verdicts (100% of them genuine-uncertainty, via a
+decision-token logprob signal — val AUC 0.681, vs 0.481 for the model's emitted confidence)
+recovers benign-PASS **30.8% → 84.6%** and decision-match **78.9% → 94.4%**, toward the
+teacher, while holding BLOCK recall at 98.4%. Blended cost is **~42% of all-Claude**, with
+**58% of verdicts staying on-device**. The concession is honest: **it's slower than Claude**
+(2.4 s vs 1.7 s) because the local model's verbose reasoning isn't short-circuited — tiering
+here buys **cost + privacy + near-teacher quality, not latency**.
+
+Standalone, the **4B distills** (BLOCK recall 81→98%, specificity held) but the **1.7B is
+too small and collapses** to always-BLOCK (0% specificity) — a clean capacity finding.
+
+**Caveats, stated plainly:** these are *teacher-agreement* numbers, not a safety guarantee —
+a Claude mistake is invisible to them. The independent ground-truth read (the **staleness
+probe** on `data/adversarial/`) is currently **underpowered**: the classifier confidently
+blocks 19 of 20 attacks before the judge sees them, so only **N=1** reaches the gray band —
+directionally clean (all judges BLOCK it) but not statistically meaningful. Exact figures
+also wobble run-to-run (MLX/Claude non-determinism on borderline cases); the directions hold.
+
+Reproduce: `make distill-data` → `make distill-train-4b` → `make distill-eval` (Mac + the
+`distill` extra); `make distill-staleness` for the safety probe.
 
 ## Quick Start
 
@@ -321,6 +379,8 @@ Key metrics:
 | `judge_max_tokens` | `512` | Max tokens for judge response |
 | `judge_timeout` | `10.0` | Per-call timeout in seconds for the judge API request |
 | `retry_count` | `2` | Retries on API or JSON parse errors |
+| `judge_backend` | `claude` | `claude` · `local` (distilled SLM) · `tiered` (local + escalate). `local`/`tiered` need the Mac-only `distill` extra + a trained adapter and fail fast at startup otherwise. See [Local Judge](#local-judge-distilled-slm). |
+| `escalation_threshold` | `0.5` | `tiered` only — escalate when the decision-token uncertainty ≥ τ (fit on val) |
 
 ### Environment Variables
 

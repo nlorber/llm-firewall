@@ -31,6 +31,15 @@ The hybrid approach cuts cost by **80–90%** and reduces p50 latency from ~500m
 
 Adversarial prompt engineering evolves faster than any fixed classifier can adapt. The LLM judge acts as a safety net for novel attack patterns that fall outside the classifier's training distribution. This is the same pattern used in production content moderation: fast model for clear-cut cases, lightweight LLM for edge cases. Haiku 4.5 handles this well — the task is a constrained binary decision with structured JSON output, not open-ended reasoning.
 
+There is, however, a middle ground between "always call Claude" and "never call Claude":
+**distil** the Claude judge into a small local model, run it first, and **escalate only the
+uncertain verdicts** back to Claude. We built and measured exactly this (§9). The answer is
+nuanced: a standalone distilled 4B recovers most of Claude's BLOCK recall but over-blocks
+benign gray-zone prompts (specificity ~30–50%), so it isn't a safe drop-in on its own — but
+the **tiered** judge escalates the uncertain ~40% and recovers specificity to ~85% at ~40% of
+Claude's cost, keeping most traffic on-device. So the honest position is: don't fine-tune to
+*avoid* the LLM, fine-tune to *ration* it. See §9 and [CONCEPTS.md](CONCEPTS.md).
+
 ---
 
 ## 2. Why DeBERTa-v3-base?
@@ -216,3 +225,71 @@ The headline F1 is measured on a test split from the same synthetic generator as
 - **Fine-grained class labeling degrades** — exact attack-class accuracy drops sharply out-of-distribution. The model knows *that* a prompt is hostile better than *which* attack it is.
 
 This is also the strongest argument for the GRAY zone: a borderline obfuscated attack the classifier is unsure about routes to the judge instead of being silently passed.
+
+---
+
+## 9. Distilling the Judge (local + tiered)
+
+The gray-zone judge is a Claude API call. §1 asks whether it can be *rationed* rather than
+avoided: distil Claude's judgments into a small local model, run it first, and escalate only
+the uncertain verdicts. This section is the design of that system; the honest numbers are in
+the README and [DECISIONS.md](DECISIONS.md).
+
+### Distillation corpus
+
+The teacher (Claude Haiku, temperature 0) labels gray-zone prompts with the exact
+`{decision, reasoning, confidence}` JSON the live judge emits; the student learns to
+reproduce it (SFT, loss on the completion only). The corpus is built by
+`src/firewall/judge/distill/data.py`: source prompts → classify with the live DeBERTa →
+keep only the GRAY band → teacher-label → stratified split.
+
+The trap is **class imbalance**. The GRAY band is intrinsically BLOCK-heavy — benign traffic
+is pre-filtered to CLEAN, so the prompts that reach the judge are threat-leaning. Naive SFT on
+the natural 88% / 12% BLOCK/PASS split collapsed the small model to *always-BLOCK* (0%
+specificity). The fix is a **benign-gray top-up**: benign prompts wearing attack-surface
+features (security questions asked for defense, dual-use, quoted-not-enacted jailbreaks). Only
+~3% land in GRAY (the classifier is confident on benign text), but enough to rebalance to
+71/29 and to give the test set enough PASS examples to *measure* specificity.
+
+### Tiered design
+
+`TieredJudge` (a composite implementing the same `Judge` interface, so `nodes.py` is
+unchanged) runs the local model, then escalates on **uncertainty**, **schema-invalid output**,
+or **error** — recording the reason so the eval can decompose the escalation rate (only the
+uncertainty share is genuine privacy leakage).
+
+The escalation **signal** is the subtle part. The obvious candidate — the model's emitted
+`confidence` — is useless (val AUC 0.481): the student was trained to mimic *Claude's*
+confidence, not its own uncertainty. The signal that works reads the model's **decision-token
+logprobs** — the probabilities of the `PASS` and `BLOCK` tokens at the JSON decision position
+— and measures how close they are (val AUC 0.681). The threshold τ is fit on **val** and all
+tiered metrics reported on **test**; τ=0.5 generalized cleanly (44% → 42% escalation).
+
+**Determinism & failure semantics:** local inference is greedy/temp-0. `local`-only fails
+closed to BLOCK on unrecoverable output; `tiered` escalates local failures to Claude; `claude`
+surfaces a 500. Default `judge_backend` is `claude` — no clone-time dependency on an adapter.
+
+**Deferred:** a *short-circuit* (abort the local decode the moment the decision token says
+"escalate", before generating the reasoning string) would cut the escalated-call latency, but
+the dominant latency cost is the *kept-local* path's verbose reasoning, which it doesn't touch
+— so it's backlog, not a win worth blocking on.
+
+### Local-model injection surface
+
+The distilled judge only ever sees gray-zone (adversarial-leaning) prompts, so its input is
+attacker-controlled. It reuses the *same* `build_judge_messages` as the Claude judge — the
+prompt is sealed in a per-call random nonce tag (`untrusted_<16 hex>`) and the system prompt
+forbids obeying anything inside it. The break-out regression (`cannot_break_out`) is run
+against `LocalJudge` too. The residual risk is unchanged from the Claude judge: it relies on
+the model honoring the instruction; the nonce only prevents a forged closing tag from escaping.
+
+### Agreement ≠ safety, and the staleness strategy
+
+Every distillation metric is *agreement with Claude*, which inherits the teacher's mistakes.
+The independent read is the **staleness probe**: run the judge on `data/adversarial/` (real
+attacks, ground-truth BLOCK) and measure ground-truth BLOCK recall on the GRAY-band subset.
+Today that probe is **underpowered** — the classifier hard-blocks 19 of 20 attacks before the
+judge sees them, leaving N=1. A real staleness measurement needs a GRAY-band-targeted
+adversarial set (the attack-side analogue of the benign-gray top-up), and re-distillation
+should be triggered when either the teacher model or the attack distribution shifts — the
+student is only ever as current as its last teacher-labeling run.
