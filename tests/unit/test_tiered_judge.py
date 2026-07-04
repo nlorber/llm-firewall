@@ -104,8 +104,10 @@ def test_judge_returns_decide_verdict_and_satisfies_protocol() -> None:
 class TestFactory:
     def test_claude_backend(self) -> None:
         with patch("firewall.judge.judge.LLMJudge") as llm:
-            make_judge("claude", teacher_model="m", temperature=0.0)
-        llm.assert_called_once_with(model="m", temperature=0.0)
+            make_judge("claude", teacher_model="m", temperature=0.0, teacher_max_tokens=128)
+        llm.assert_called_once_with(
+            model="m", max_tokens=128, retry_count=2, timeout=10.0, temperature=0.0
+        )
 
     def test_local_backend_fails_closed(self) -> None:
         with patch("firewall.judge.local_judge.LocalJudge") as local:

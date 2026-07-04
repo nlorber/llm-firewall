@@ -25,7 +25,7 @@ from firewall.api.schemas import (
     HealthResponse,
 )
 from firewall.classifier.model import load_classifier
-from firewall.judge.judge import LLMJudge
+from firewall.judge.tiered import make_judge
 from firewall.orchestrator.graph import build_graph
 from firewall.orchestrator.metrics import REGISTRY
 
@@ -49,7 +49,43 @@ def _load_config() -> dict[str, Any]:
         "judge_max_tokens": orch["judge_max_tokens"],
         "judge_timeout": orch["judge_timeout"],
         "retry_count": orch["retry_count"],
+        # Judge backend (default "claude" — backward-compatible). local/tiered add the SLM.
+        "judge_backend": orch.get("judge_backend", "claude"),
+        "local_judge_model": orch.get("local_judge_model"),
+        "local_judge_adapter_path": orch.get("local_judge_adapter_path"),
+        "local_judge_max_tokens": orch.get("local_judge_max_tokens", 256),
+        "escalation_signal": orch.get("escalation_signal", "logprob_margin"),
+        "escalation_threshold": orch.get("escalation_threshold", 0.5),
     }
+
+
+def _build_judge(config: dict[str, Any]) -> Any:
+    """Construct the configured judge, failing fast if a local/tiered backend can't run here."""
+    backend = config["judge_backend"]
+    if backend in ("local", "tiered"):
+        import importlib.util
+
+        adapter = config["local_judge_adapter_path"]
+        if importlib.util.find_spec("mlx_lm") is None:
+            raise RuntimeError(
+                f"judge_backend {backend!r} needs mlx-lm (install the 'distill' extra)"
+            )
+        if not config["local_judge_model"]:
+            raise RuntimeError(f"judge_backend {backend!r} needs local_judge_model in config")
+        if adapter and not Path(adapter).exists():
+            raise RuntimeError(f"local_judge_adapter_path not found: {adapter}")
+    return make_judge(
+        backend,
+        teacher_model=config["judge_model"],
+        teacher_max_tokens=config["judge_max_tokens"],
+        retry_count=config["retry_count"],
+        timeout=config["judge_timeout"],
+        local_model=config["local_judge_model"],
+        adapter_path=config["local_judge_adapter_path"],
+        signal_mode=config["escalation_signal"],
+        threshold=config["escalation_threshold"],
+        max_tokens=config["local_judge_max_tokens"],
+    )
 
 
 def create_app() -> FastAPI:
@@ -59,12 +95,7 @@ def create_app() -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         config = _load_config()
         classifier = load_classifier(config["model_path"], max_length=config["max_length"])
-        judge = LLMJudge(
-            model=config["judge_model"],
-            max_tokens=config["judge_max_tokens"],
-            retry_count=config["retry_count"],
-            timeout=config["judge_timeout"],
-        )
+        judge = _build_judge(config)
         app.state.graph = build_graph(
             classifier,
             judge,
@@ -104,13 +135,15 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=500, detail="Internal processing error") from None
         clf = result["classification"]
         scores = [ClassificationScore(label=k, score=v) for k, v in clf["scores"].items()]
+        judge_result = result["judge_result"]
         return AnalysisResponse(
             decision=result["final_decision"],
             zone=result["zone"],
             top_label=clf["label"],
             scores=scores,
             explanation=result["explanation"],
-            judge_invoked=result["judge_result"] is not None,
+            judge_invoked=judge_result is not None,
+            judge_tier=judge_result.get("tier") if judge_result else None,
         )
 
     @app.get("/health", response_model=HealthResponse)

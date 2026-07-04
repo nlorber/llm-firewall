@@ -1,4 +1,5 @@
 """Prometheus metrics for the firewall orchestrator pipeline."""
+
 from __future__ import annotations
 
 from prometheus_client import CollectorRegistry, Counter, Histogram
@@ -30,5 +31,12 @@ classification_label_total = Counter(
     "firewall_classification_label_total",
     "Classification counts by label",
     labelnames=["label"],
+    registry=REGISTRY,
+)
+
+judge_tier_total = Counter(
+    "firewall_judge_tier_total",
+    "Tiered-judge verdicts by tier that answered (local kept vs escalated to claude)",
+    labelnames=["tier"],
     registry=REGISTRY,
 )

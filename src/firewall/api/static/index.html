@@ -289,7 +289,7 @@ function render(d, dt){
       <div class="panel reveal" style="animation-delay:.08s">
         <div class="ptitle">Verdict</div>
         <div class="verdict ${pass?'vp':'vb'}"><span class="big" id="big">${d.decision}</span><span class="zone">zone · ${d.zone}</span></div>
-        ${d.judge_invoked ? `<span class="jtag"><span class="gem"></span>resolved by Claude judge</span>` : ``}
+        ${d.judge_invoked ? `<span class="jtag"><span class="gem"></span>${d.judge_tier === 'local' ? 'resolved by local SLM (on-device)' : d.judge_tier === 'claude' ? 'escalated to Claude judge' : 'resolved by Claude judge'}</span>` : ``}
         <div class="reason"><span class="rl">${d.judge_invoked?'judge reasoning':'decision rationale'}</span>${d.explanation}</div>
       </div>
     </div>`;

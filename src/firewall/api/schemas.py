@@ -3,6 +3,7 @@
 All data crossing the HTTP boundary is validated here. The app layer imports
 exclusively from this module — no raw dicts in route handlers.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
@@ -35,6 +36,8 @@ class AnalysisResponse(BaseModel):
         scores: Full per-class probability distribution.
         explanation: Human-readable rationale for the decision.
         judge_invoked: Whether the LLM judge was consulted (GRAY zone only).
+        judge_tier: For a tiered backend, which tier answered — ``"local"`` (kept on-device)
+            or ``"claude"`` (escalated). ``None`` for the plain Claude/local backends.
     """
 
     decision: str
@@ -43,6 +46,7 @@ class AnalysisResponse(BaseModel):
     scores: list[ClassificationScore]
     explanation: str
     judge_invoked: bool = False
+    judge_tier: str | None = None
 
 
 class HealthResponse(BaseModel):

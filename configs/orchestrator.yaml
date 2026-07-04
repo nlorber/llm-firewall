@@ -14,3 +14,14 @@ judge_model:      "claude-haiku-4-5-20251001"
 judge_max_tokens: 512
 judge_timeout:    10.0
 retry_count:      2
+
+# Judge backend: "claude" (default, Claude API only) | "local" (distilled SLM only,
+# fail-closed to BLOCK) | "tiered" (local first, escalate uncertain verdicts to Claude).
+# local/tiered need the 'distill' extra (mlx-lm) + a trained adapter, and fail fast at
+# startup otherwise. See the distilled-judge docs for the measured trade-offs.
+judge_backend: "claude"
+# local_judge_model:        "mlx-community/Qwen3-4B-Instruct-2507-4bit"
+# local_judge_adapter_path: "adapters/qwen3-4b"
+# local_judge_max_tokens:   256
+# escalation_signal:        "logprob_margin"   # tiered only
+# escalation_threshold:     0.5                # tiered only; fit on val

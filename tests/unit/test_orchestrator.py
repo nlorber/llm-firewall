@@ -198,7 +198,36 @@ class TestJudgeNode:
         assert update["judge_result"]["decision"] == "BLOCK"
         assert update["judge_result"]["reasoning"] == "looks suspicious"
         assert update["judge_result"]["confidence"] == 0.85
+        assert update["judge_result"]["tier"] is None  # plain judge → no tier provenance
         mock_judge.judge.assert_called_once()
+
+    def test_judge_node_records_tier_for_tiered_judge(self) -> None:
+        from firewall.judge.tiered import LocalResult, TieredJudge
+
+        class _Local:
+            def judge_for_tiering(
+                self, prompt: str, classification_label: str, scores: dict[str, float]
+            ) -> LocalResult:
+                return LocalResult(
+                    JudgeVerdict("BLOCK", "kept local", 0.9), signal=0.1, valid=True
+                )
+
+        class _Claude:
+            def judge(
+                self, prompt: str, classification_label: str, scores: dict[str, float]
+            ) -> JudgeVerdict:
+                return JudgeVerdict("PASS", "escalated", 0.8)
+
+        tiered = TieredJudge(_Local(), _Claude(), threshold=0.5)
+        nodes_mod.init_nodes(classifier=_mock_classifier("benign", 0.1), judge=tiered)
+        state = {
+            **_make_state("p"),
+            "classification": {"label": "injection", "scores": {"injection": 0.55}},
+        }
+        update = nodes_mod.judge_node(state)
+        assert update["judge_result"]["decision"] == "BLOCK"  # low signal → kept local
+        assert update["judge_result"]["tier"] == "local"
+        assert update["judge_result"]["reason"] == "none"
 
     def test_judge_node_passes_classification_to_judge(self) -> None:
         mock_judge = MagicMock()

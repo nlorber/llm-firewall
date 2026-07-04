@@ -10,6 +10,56 @@ from pydantic import ValidationError
 from firewall.api.schemas import AnalysisRequest, ClassificationScore
 
 
+def _judge_config(backend: str = "claude", **over: object) -> dict:
+    cfg = {
+        "judge_model": "m",
+        "judge_max_tokens": 128,
+        "judge_timeout": 5.0,
+        "retry_count": 1,
+        "judge_backend": backend,
+        "local_judge_model": None,
+        "local_judge_adapter_path": None,
+        "local_judge_max_tokens": 256,
+        "escalation_signal": "logprob_margin",
+        "escalation_threshold": 0.5,
+    }
+    cfg.update(over)
+    return cfg
+
+
+class TestBuildJudge:
+    def test_claude_backend_maps_args(self) -> None:
+        from firewall.api.app import _build_judge
+
+        with patch("firewall.api.app.make_judge") as mk:
+            _build_judge(_judge_config("claude"))
+        assert mk.call_args.args == ("claude",)
+        assert mk.call_args.kwargs["teacher_model"] == "m"
+        assert mk.call_args.kwargs["teacher_max_tokens"] == 128
+
+    def test_tiered_fails_fast_without_mlx(self) -> None:
+        from firewall.api.app import _build_judge
+
+        with (
+            patch("importlib.util.find_spec", return_value=None),
+            pytest.raises(RuntimeError, match="mlx-lm"),
+        ):
+            _build_judge(_judge_config("tiered", local_judge_model="base"))
+
+    def test_tiered_fails_fast_on_missing_adapter(self) -> None:
+        from firewall.api.app import _build_judge
+
+        with (
+            patch("importlib.util.find_spec", return_value=object()),
+            pytest.raises(RuntimeError, match="adapter_path not found"),
+        ):
+            _build_judge(
+                _judge_config(
+                    "tiered", local_judge_model="base", local_judge_adapter_path="/no/such/adapter"
+                )
+            )
+
+
 def _graph_result(decision: str, zone: str, label: str, score: float, judge: bool) -> dict:
     return {
         "prompt": "test prompt",
@@ -43,7 +93,7 @@ def client():
     with (
         patch("firewall.api.app.load_classifier", return_value=mock_clf),
         patch("firewall.api.app.build_graph", return_value=mock_graph),
-        patch("firewall.api.app.LLMJudge", return_value=MagicMock()),
+        patch("firewall.api.app._build_judge", return_value=MagicMock()),
         patch("firewall.api.app._load_config") as mock_cfg,
     ):
         mock_cfg.return_value = {
@@ -89,6 +139,20 @@ class TestAnalyzeEndpoint:
         mock_graph.invoke.return_value = _graph_result("PASS", "GRAY", "jailbreak", 0.55, True)
         response = test_client.post("/analyze", json={"prompt": "maybe bad"})
         assert response.json()["judge_invoked"] is True
+
+    def test_judge_tier_surfaced_when_tiered(self, client) -> None:
+        test_client, mock_graph = client
+        result = _graph_result("PASS", "GRAY", "jailbreak", 0.55, True)
+        result["judge_result"]["tier"] = "claude"  # escalated to the teacher
+        mock_graph.invoke.return_value = result
+        response = test_client.post("/analyze", json={"prompt": "maybe bad"})
+        assert response.json()["judge_tier"] == "claude"
+
+    def test_judge_tier_none_for_plain_backend(self, client) -> None:
+        test_client, mock_graph = client
+        mock_graph.invoke.return_value = _graph_result("PASS", "GRAY", "jailbreak", 0.55, True)
+        response = test_client.post("/analyze", json={"prompt": "maybe bad"})
+        assert response.json()["judge_tier"] is None
 
     def test_graph_invoke_error_returns_sanitized_500(self, client) -> None:
         test_client, mock_graph = client

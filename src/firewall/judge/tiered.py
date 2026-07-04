@@ -128,6 +128,9 @@ def make_judge(
     *,
     teacher_model: str = _DEFAULT_TEACHER,
     temperature: float | None = None,
+    teacher_max_tokens: int = 512,
+    retry_count: int = 2,
+    timeout: float = 10.0,
     local_model: str | None = None,
     adapter_path: str | None = None,
     signal_mode: Literal["confidence", "logprob_margin", "entropy"] = "logprob_margin",
@@ -143,8 +146,17 @@ def make_judge(
     """
     from firewall.judge.judge import LLMJudge
 
+    def _claude() -> LLMJudge:
+        return LLMJudge(
+            model=teacher_model,
+            max_tokens=teacher_max_tokens,
+            retry_count=retry_count,
+            timeout=timeout,
+            temperature=temperature,
+        )
+
     if backend == "claude":
-        return LLMJudge(model=teacher_model, temperature=temperature)
+        return _claude()
     if backend in ("local", "tiered"):
         from firewall.judge.local_judge import LocalJudge
 
@@ -160,6 +172,5 @@ def make_judge(
             signal_mode=signal_mode,
             max_tokens=max_tokens,
         )
-        claude = LLMJudge(model=teacher_model, temperature=temperature)
-        return TieredJudge(local, claude, threshold)
+        return TieredJudge(local, _claude(), threshold)
     raise ValueError(f"unknown judge backend: {backend!r}")
