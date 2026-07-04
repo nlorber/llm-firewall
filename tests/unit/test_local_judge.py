@@ -6,7 +6,12 @@ from typing import TYPE_CHECKING
 import pytest
 
 from firewall.judge.base import Judge, JudgeVerdict
-from firewall.judge.local_judge import LocalJudge, ThinkingModeError, strip_and_check_thinking
+from firewall.judge.local_judge import (
+    LocalJudge,
+    ThinkingModeError,
+    _decision_uncertainty,
+    strip_and_check_thinking,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -62,6 +67,53 @@ class TestLocalJudgeAdapter:
     def test_load_kwargs_forwards_adapter_when_set(self) -> None:
         judge = LocalJudge("base", adapter_path="adapters/qwen3-1.7b")
         assert judge._load_kwargs() == {"adapter_path": "adapters/qwen3-1.7b"}
+
+
+class TestLocalJudgeTiering:
+    def test_confidence_signal_is_one_minus_confidence(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        judge = LocalJudge("fake-model")
+        payload = json.dumps({"decision": "BLOCK", "reasoning": "x", "confidence": 0.7})
+        monkeypatch.setattr(judge, "_generate", _fixed(payload))
+        result = judge.judge_for_tiering("x", "injection", {"injection": 0.5})
+        assert result.valid
+        assert result.verdict is not None and result.verdict.decision == "BLOCK"
+        assert result.signal == pytest.approx(0.3)
+
+    def test_invalid_output_is_max_uncertain_and_invalid(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        judge = LocalJudge("fake-model")
+        monkeypatch.setattr(judge, "_generate", _fixed("NOT JSON"))
+        result = judge.judge_for_tiering("x", "injection", {"injection": 0.5})
+        assert not result.valid
+        assert result.verdict is None
+        assert result.signal == 1.0
+
+    def test_satisfies_tiering_local_judge_protocol(self) -> None:
+        from firewall.judge.tiered import TieringLocalJudge
+
+        assert isinstance(LocalJudge("fake-model"), TieringLocalJudge)
+
+
+class TestDecisionUncertainty:
+    def test_coin_flip_is_max_uncertainty(self) -> None:
+        assert _decision_uncertainty(0.0, 0.0, "margin") == pytest.approx(1.0)
+        assert _decision_uncertainty(0.0, 0.0, "entropy") == pytest.approx(1.0)
+
+    def test_confident_is_near_zero(self) -> None:
+        assert _decision_uncertainty(0.0, -20.0, "margin") == pytest.approx(0.0, abs=1e-6)
+        assert _decision_uncertainty(0.0, -20.0, "entropy") == pytest.approx(0.0, abs=1e-6)
+
+    def test_monotonic_in_margin(self) -> None:
+        # A wider log-prob gap = more certain = lower uncertainty.
+        assert _decision_uncertainty(0.0, -1.0, "margin") > _decision_uncertainty(
+            0.0, -3.0, "margin"
+        )
+        assert _decision_uncertainty(-0.5, 0.0, "entropy") > _decision_uncertainty(
+            -4.0, 0.0, "entropy"
+        )
 
 
 class TestLocalJudgeNonThinking:

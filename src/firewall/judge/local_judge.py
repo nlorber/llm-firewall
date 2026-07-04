@@ -8,10 +8,12 @@ Apple-Silicon path is exercised only by the integration smoke.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import TYPE_CHECKING, Any, Literal
 
 from firewall.judge.base import JudgeVerdict, build_judge_messages, parse_verdict
+from firewall.judge.tiered import LocalResult
 
 if TYPE_CHECKING:
     from firewall.judge.base import ChatMessage
@@ -49,6 +51,23 @@ def strip_and_check_thinking(raw: str) -> str:
     return stripped
 
 
+def _decision_uncertainty(lp_block: float, lp_pass: float, mode: str) -> float:
+    """Map the BLOCK/PASS decision-token log-probs to an uncertainty in [0, 1] (1 = a coin
+    flip between the two, 0 = certain). ``entropy`` = binary entropy of the renormalised
+    2-way distribution; otherwise a margin-based ``2 * min(p)``. Higher = more uncertain, so
+    it composes with the ``signal >= threshold`` escalation rule.
+    """
+    top = max(lp_block, lp_pass)
+    e_block = math.exp(lp_block - top)
+    e_pass = math.exp(lp_pass - top)
+    p_block = e_block / (e_block + e_pass)
+    if mode == "entropy":
+        if p_block <= 0.0 or p_block >= 1.0:
+            return 0.0
+        return -(p_block * math.log2(p_block) + (1 - p_block) * math.log2(1 - p_block))
+    return 2.0 * min(p_block, 1.0 - p_block)
+
+
 class LocalJudge:
     """Judge a GRAY-zone prompt with a local MLX model (greedy, non-thinking)."""
 
@@ -60,6 +79,7 @@ class LocalJudge:
         on_failure: Literal["raise", "block"] = "raise",
         resample_temp: float | None = None,
         adapter_path: str | None = None,
+        signal_mode: Literal["confidence", "logprob_margin", "entropy"] = "confidence",
     ) -> None:
         self._model_path = model_path
         self._max_tokens = max_tokens
@@ -67,6 +87,7 @@ class LocalJudge:
         self._on_failure = on_failure
         self._resample_temp = resample_temp
         self._adapter_path = adapter_path  # base + LoRA adapter (fine-tuned); None = base only
+        self._signal_mode = signal_mode  # tiering uncertainty signal (see judge_for_tiering)
         self._model: Any = None
         self._tokenizer: Any = None
 
@@ -103,6 +124,33 @@ class LocalJudge:
         """
         messages, _boundary = build_judge_messages(prompt, classification_label, scores)
         return self._generate(messages, temp=0.0)
+
+    def judge_for_tiering(
+        self,
+        prompt: str,
+        classification_label: str,
+        scores: dict[str, float],
+    ) -> LocalResult:
+        """Judge and report an uncertainty signal (higher = more uncertain) for TieredJudge.
+
+        In ``"confidence"`` mode the signal is ``1 - emitted confidence`` (a structurally weak
+        proxy — the student mimics the teacher's confidence, not its own uncertainty). The
+        ``logprob_margin`` / ``entropy`` modes instead read the model's *own* uncertainty at the
+        BLOCK/PASS decision token. An unparseable output is maximally uncertain and invalid →
+        the composite escalates.
+        """
+        messages, _boundary = build_judge_messages(prompt, classification_label, scores)
+        logprob_signal: float | None = None
+        if self._signal_mode == "confidence":
+            raw = self._generate(messages, temp=0.0)
+        else:
+            raw, logprob_signal = self._generate_with_signal(messages)
+        try:
+            verdict = parse_verdict(strip_and_check_thinking(raw))
+        except (ValueError, KeyError):
+            return LocalResult(verdict=None, signal=1.0, valid=False)
+        signal = (1.0 - verdict.confidence) if logprob_signal is None else logprob_signal
+        return LocalResult(verdict=verdict, signal=signal, valid=True)
 
     def _parse_or_recover(self, raw: str, messages: list[ChatMessage]) -> JudgeVerdict:
         """Parse the greedy output; on schema failure optionally resample once, then
@@ -148,6 +196,54 @@ class LocalJudge:
             sampler=sampler,
         )
         return result.strip()
+
+    def _generate_with_signal(  # pragma: no cover
+        self, messages: list[ChatMessage]
+    ) -> tuple[str, float]:
+        """Greedy-decode and read the model's uncertainty at the BLOCK/PASS decision token.
+
+        Streams tokens; at the step that first emits a char past ``"decision": "`` (the JSON
+        decision value), the yielded log-probs are the decision distribution — we read the
+        BLOCK and PASS first-token log-probs there and map them to an uncertainty in [0, 1].
+        Falls back to maximally uncertain if the model never emits a well-formed decision key.
+        """
+        import mlx.core as mx
+        from mlx_lm.generate import generate_step
+        from mlx_lm.sample_utils import make_sampler
+
+        self._ensure_loaded()
+        tok = self._tokenizer
+        prompt_ids = tok.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            enable_thinking=self._enable_thinking,
+            tokenize=True,
+        )
+        block_first = tok.encode("BLOCK", add_special_tokens=False)[0]
+        pass_first = tok.encode("PASS", add_special_tokens=False)[0]
+        mode = "entropy" if self._signal_mode == "entropy" else "margin"
+        marker = '"decision": "'
+
+        tokens: list[int] = []
+        signal = 1.0  # maximally uncertain until a decision token is located
+        found = False
+        sampler = make_sampler(temp=0.0)
+        for token, logprobs in generate_step(
+            mx.array(prompt_ids), self._model, max_tokens=self._max_tokens, sampler=sampler
+        ):
+            tid = int(token)
+            if tid == tok.eos_token_id:
+                break  # exclude the end token so decode() yields clean JSON (mirrors generate())
+            tokens.append(tid)
+            if not found:
+                text = tok.decode(tokens)
+                pos = text.find(marker)
+                if pos != -1 and len(text) > pos + len(marker):
+                    signal = _decision_uncertainty(
+                        float(logprobs[block_first]), float(logprobs[pass_first]), mode
+                    )
+                    found = True
+        return tok.decode(tokens).strip(), signal
 
     def _ensure_loaded(self) -> None:  # pragma: no cover
         if self._model is None:

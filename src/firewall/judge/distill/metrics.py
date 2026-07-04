@@ -127,6 +127,27 @@ def latency_stats(latencies: list[float]) -> dict[str, float]:
     }
 
 
+def auc(scores: list[float], labels: list[bool]) -> float:
+    """Area under the ROC curve: P(a positive's score > a negative's), ties counting 0.5.
+
+    Used to rank escalation-signal candidates by how well they predict local-judge
+    disagreement-with-teacher on val. 0.5 = no discriminative power; returns 0.5 when a class
+    is absent (undefined). O(n^2), fine for the small val split.
+    """
+    pos = [s for s, y in zip(scores, labels, strict=True) if y]
+    neg = [s for s, y in zip(scores, labels, strict=True) if not y]
+    if not pos or not neg:
+        return 0.5
+    wins = 0.0
+    for a in pos:
+        for b in neg:
+            if a > b:
+                wins += 1.0
+            elif a == b:
+                wins += 0.5
+    return wins / (len(pos) * len(neg))
+
+
 def token_cost_usd(
     input_tokens: int,
     output_tokens: int,

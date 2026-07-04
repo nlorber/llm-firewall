@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 from firewall.judge.distill.metrics import (
+    auc,
     benign_pass_rate,
     block_recall,
     confusion_counts,
@@ -97,6 +98,19 @@ def test_latency_stats_percentiles() -> None:
     # Single sample: every percentile is that sample.
     one = latency_stats([0.42])
     assert one["p50"] == 0.42 and one["p95"] == 0.42 and one["mean"] == 0.42
+
+
+def test_auc() -> None:
+    # Perfect separation (positives all score higher than negatives).
+    assert auc([3.0, 4.0, 1.0, 2.0], [True, True, False, False]) == 1.0
+    # Reversed → 0.0.
+    assert auc([1.0, 2.0, 3.0, 4.0], [True, True, False, False]) == 0.0
+    # Partial: pos={2,4}, neg={1,3} → 3 of 4 pairs won.
+    assert math.isclose(auc([1.0, 2.0, 3.0, 4.0], [False, True, False, True]), 0.75)
+    # A tie counts as half.
+    assert auc([1.0, 1.0], [True, False]) == 0.5
+    # No positives or no negatives → undefined → chance.
+    assert auc([0.9, 0.8], [True, True]) == 0.5
 
 
 def test_token_cost_usd() -> None:
