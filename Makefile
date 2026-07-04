@@ -1,4 +1,4 @@
-.PHONY: setup train evaluate distill-data distill-topup distill-train-1.7b distill-train-4b distill-eval serve test lint format clean docker-build
+.PHONY: setup train evaluate distill-data distill-topup distill-train-1.7b distill-train-4b distill-eval distill-staleness serve test lint format clean docker-build
 
 ## Install all dependencies with uv and set up pre-commit hooks
 setup:
@@ -32,6 +32,10 @@ distill-train-4b:
 ## Eval baselines on data/distill/test.jsonl (Claude + base MLX models; writes reports/)
 distill-eval:
 	uv run python -m firewall.judge.distill.eval --config configs/distill.yaml
+
+## Staleness probe: ground-truth BLOCK recall on the GRAY-band adversarial subset
+distill-staleness:
+	uv run python -m firewall.judge.distill.staleness --config configs/distill.yaml
 
 ## Start the FastAPI inference server (reads host/port/log_level from configs/serving.yaml)
 serve:
