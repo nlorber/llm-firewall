@@ -16,10 +16,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from firewall.judge.base import Judge, JudgeVerdict
+
+_DEFAULT_TEACHER = "claude-haiku-4-5-20251001"  # mirrors LLMJudge's default
 
 
 class Tier(StrEnum):
@@ -119,3 +121,45 @@ class TieredJudge:
     ) -> TieredOutcome:
         verdict = self._escalate_to.judge(prompt, classification_label, scores)
         return TieredOutcome(verdict, Tier.CLAUDE, reason, signal)
+
+
+def make_judge(
+    backend: str,
+    *,
+    teacher_model: str = _DEFAULT_TEACHER,
+    temperature: float | None = None,
+    local_model: str | None = None,
+    adapter_path: str | None = None,
+    signal_mode: Literal["confidence", "logprob_margin", "entropy"] = "logprob_margin",
+    threshold: float = 0.5,
+    max_tokens: int = 256,
+) -> Judge:
+    """Build the judge for a configured backend (``claude`` | ``local`` | ``tiered``).
+
+    ``local``/``tiered`` require ``local_model``; ``tiered`` wraps a signal-emitting LocalJudge
+    plus a Claude escalation target. Judges are constructed lazily (no MLX/Anthropic import at
+    module load), so a missing adapter or MLX surfaces at first use — the orchestrator (Plan 7)
+    turns that into a startup check. ``local``-only fails closed to BLOCK on unrecoverable error.
+    """
+    from firewall.judge.judge import LLMJudge
+
+    if backend == "claude":
+        return LLMJudge(model=teacher_model, temperature=temperature)
+    if backend in ("local", "tiered"):
+        from firewall.judge.local_judge import LocalJudge
+
+        if not local_model:
+            raise ValueError(f"judge backend {backend!r} requires local_model")
+        if backend == "local":
+            return LocalJudge(
+                local_model, adapter_path=adapter_path, max_tokens=max_tokens, on_failure="block"
+            )
+        local = LocalJudge(
+            local_model,
+            adapter_path=adapter_path,
+            signal_mode=signal_mode,
+            max_tokens=max_tokens,
+        )
+        claude = LLMJudge(model=teacher_model, temperature=temperature)
+        return TieredJudge(local, claude, threshold)
+    raise ValueError(f"unknown judge backend: {backend!r}")

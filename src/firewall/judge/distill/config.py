@@ -49,6 +49,8 @@ class DistillConfig:
     claude_price_in_per_mtok: float = 1.0
     claude_price_out_per_mtok: float = 5.0
     finetuned_local_models: tuple[FinetunedModel, ...] = ()
+    tiered_model_name: str = ""  # which finetuned model to tier (matches a name above); "" skips
+    tiered_threshold: float = 0.5  # escalate when the decision-uncertainty signal >= this
 
 
 def load_distill_config(path: str | Path) -> DistillConfig:
@@ -81,4 +83,6 @@ def load_distill_config(path: str | Path) -> DistillConfig:
             FinetunedModel(name=m["name"], base=m["base"], adapter_path=m["adapter_path"])
             for m in data.get("finetuned_local_models", ())
         ),
+        tiered_model_name=str(data.get("tiered_model_name", "")),
+        tiered_threshold=float(data.get("tiered_threshold", 0.5)),
     )

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
+import pytest
+
 from firewall.judge.base import Judge, JudgeVerdict
 from firewall.judge.tiered import (
     EscalationReason,
     LocalResult,
     Tier,
     TieredJudge,
+    make_judge,
 )
 
 _LOCAL_V = JudgeVerdict("PASS", "local says pass", 0.9)
@@ -94,3 +99,39 @@ def test_judge_returns_decide_verdict_and_satisfies_protocol() -> None:
     tiered = _tiered(local, _FakeClaude())
     assert isinstance(tiered, Judge)
     assert tiered.judge("p", "injection", {"injection": 0.5}) is _LOCAL_V
+
+
+class TestFactory:
+    def test_claude_backend(self) -> None:
+        with patch("firewall.judge.judge.LLMJudge") as llm:
+            make_judge("claude", teacher_model="m", temperature=0.0)
+        llm.assert_called_once_with(model="m", temperature=0.0)
+
+    def test_local_backend_fails_closed(self) -> None:
+        with patch("firewall.judge.local_judge.LocalJudge") as local:
+            make_judge("local", local_model="base", adapter_path="adapters/a", max_tokens=128)
+        local.assert_called_once_with(
+            "base", adapter_path="adapters/a", max_tokens=128, on_failure="block"
+        )
+
+    def test_tiered_backend_wraps_local_and_claude(self) -> None:
+        with (
+            patch("firewall.judge.local_judge.LocalJudge") as local,
+            patch("firewall.judge.judge.LLMJudge") as llm,
+        ):
+            judge = make_judge(
+                "tiered", local_model="base", adapter_path="adapters/a", threshold=0.6
+            )
+        assert isinstance(judge, TieredJudge)
+        local.assert_called_once_with(
+            "base", adapter_path="adapters/a", signal_mode="logprob_margin", max_tokens=256
+        )
+        llm.assert_called_once()
+
+    def test_local_requires_model(self) -> None:
+        with pytest.raises(ValueError, match="requires local_model"):
+            make_judge("local")
+
+    def test_unknown_backend_raises(self) -> None:
+        with pytest.raises(ValueError, match="unknown judge backend"):
+            make_judge("bogus")

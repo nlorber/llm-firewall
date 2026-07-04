@@ -57,3 +57,8 @@ finetuned_local_models:
   - name: "finetuned Qwen3-4B-Instruct-2507"
     base: "mlx-community/Qwen3-4B-Instruct-2507-4bit"
     adapter_path: "adapters/qwen3-4b"
+
+# Tiered judge (local ft 4B first, escalate uncertain verdicts to Claude). τ fit on val
+# (decision-token logprob signal AUC 0.681); reported on test.
+tiered_model_name: "finetuned Qwen3-4B-Instruct-2507"
+tiered_threshold: 0.5

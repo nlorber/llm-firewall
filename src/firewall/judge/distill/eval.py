@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
     from firewall.judge.judge import LLMJudge
     from firewall.judge.local_judge import LocalJudge
+    from firewall.judge.tiered import TieredJudge
 
 _INVALID = "INVALID"
 
@@ -52,6 +53,8 @@ class Outcome:
     input_tokens: int = 0
     output_tokens: int = 0
     error: str | None = None
+    tier: str | None = None  # tiered judge only: which tier answered
+    reason: str | None = None  # tiered judge only: escalation reason
 
 
 @dataclass
@@ -66,6 +69,8 @@ class JudgeRun:
     input_tokens: int = 0
     output_tokens: int = 0
     error: str | None = None
+    tier: str | None = None
+    reason: str | None = None
 
 
 RunFn = Callable[[str, str, dict[str, float]], Outcome]
@@ -87,6 +92,8 @@ def run_all(run_fn: RunFn, records: list[dict[str, Any]]) -> list[JudgeRun]:
                 input_tokens=out.input_tokens,
                 output_tokens=out.output_tokens,
                 error=out.error,
+                tier=out.tier,
+                reason=out.reason,
             )
         )
     return runs
@@ -138,6 +145,31 @@ def build_report(
     return report
 
 
+def tiered_summary(runs: list[JudgeRun], claude_cost_per_call: float) -> dict[str, Any]:
+    """Escalation accounting for a tiered run: rate + by-reason, blended cost, latency by tier.
+
+    Blended cost = escalation rate x Claude's per-call cost (kept-local calls are ~$0). Latency
+    is split by tier — kept ≈ local; escalated ≈ local(partial) + Claude. Only the
+    ``uncertainty`` share of escalations is genuine privacy leakage; the rest is fixable noise.
+    """
+    from collections import Counter
+
+    n = len(runs)
+    escalated = [r for r in runs if r.tier == "claude"]
+    kept = [r for r in runs if r.tier == "local"]
+    esc_rate = len(escalated) / n if n else 0.0
+    by_reason = dict(Counter(r.reason for r in runs if r.reason and r.reason != "none"))
+    return {
+        "escalation_rate": esc_rate,
+        "escalation_by_reason": by_reason,
+        "n_kept": len(kept),
+        "n_escalated": len(escalated),
+        "blended_cost_per_call_usd": esc_rate * claude_cost_per_call,
+        "latency_kept": latency_stats([r.latency_s for r in kept]),
+        "latency_escalated": latency_stats([r.latency_s for r in escalated]),
+    }
+
+
 def load_test_records(path: str | Path) -> list[dict[str, Any]]:
     """Read a distillation split (JSONL, one record per line)."""
     from pathlib import Path as _Path
@@ -167,6 +199,25 @@ def render_markdown(reports: list[dict[str, Any]]) -> str:
             f"| {sv['rate'] * 100:.1f}% | {lat['p50']:.3f} / {lat['p95']:.3f} "
             f"| ${r['cost_per_call_usd']:.5f} |"
         )
+    tiered = [r for r in reports if "tiered" in r]
+    if tiered:
+        lines.append("")
+        lines.append("### Tiered system (escalation accounting)")
+        for r in tiered:
+            t = r["tiered"]
+            lk, le = t["latency_kept"], t["latency_escalated"]
+            lines.append(f"\n**{r['name']}**")
+            lines.append(
+                f"- escalation rate: {t['escalation_rate'] * 100:.1f}% "
+                f"({t['n_escalated']}/{t['n_kept'] + t['n_escalated']}) "
+                f"by reason: {t['escalation_by_reason']}"
+            )
+            lines.append(f"- blended cost/call: ${t['blended_cost_per_call_usd']:.5f}")
+            lines.append(
+                f"- latency p50/p95: kept {lk['p50']:.3f}/{lk['p95']:.3f}s "
+                f"· escalated {le['p50']:.3f}/{le['p95']:.3f}s"
+            )
+
     lines.append("")
     lines.append("### Agreement by provenance (same-family generation inflates agreement)")
     for r in reports:
@@ -221,6 +272,27 @@ def run_local_fn(judge: LocalJudge) -> RunFn:  # pragma: no cover
         except (ValueError, KeyError):
             return Outcome(_INVALID, False, latency)
         return Outcome(predicted=verdict.decision, valid=True, latency_s=latency)
+
+    return _run
+
+
+def run_tiered_fn(judge: TieredJudge) -> RunFn:  # pragma: no cover
+    """A RunFn for a TieredJudge: times ``decide`` and records which tier answered + why.
+
+    Cost is not read per-call — it is estimated in :func:`tiered_summary` as escalation rate x
+    Claude's per-call cost, so this stays a thin timing wrapper.
+    """
+
+    def _run(text: str, label: str, scores: dict[str, float]) -> Outcome:
+        start = time.perf_counter()
+        outcome = judge.decide(text, label, scores)
+        return Outcome(
+            predicted=outcome.verdict.decision,
+            valid=True,
+            latency_s=time.perf_counter() - start,
+            tier=outcome.tier.value,
+            reason=outcome.reason.value,
+        )
 
     return _run
 
@@ -280,6 +352,33 @@ def main() -> None:  # pragma: no cover
         )
         finetuned_runs = run_all(run_local_fn(finetuned), records)
         reports.append(build_report(fm.name, finetuned_runs, 0.0, 0.0))
+
+    # Tiered system: local ft model first, escalate uncertain verdicts to Claude (the deliverable).
+    claude_cost = reports[0]["cost_per_call_usd"]  # measured Claude per-call cost for blending
+    tiered_fm = next(
+        (f for f in config.finetuned_local_models if f.name == config.tiered_model_name), None
+    )
+    if tiered_fm is not None and Path(tiered_fm.adapter_path).exists():
+        from firewall.judge.tiered import TieredJudge, make_judge
+
+        print(f"[distill-eval] running tiered ({tiered_fm.name}, τ={config.tiered_threshold})...")
+        tiered = make_judge(
+            "tiered",
+            teacher_model=config.teacher_model,
+            temperature=config.teacher_temperature,
+            local_model=tiered_fm.base,
+            adapter_path=tiered_fm.adapter_path,
+            signal_mode="logprob_margin",
+            threshold=config.tiered_threshold,
+            max_tokens=config.local_baseline_max_tokens,
+        )
+        assert isinstance(tiered, TieredJudge)  # the "tiered" backend always builds one
+        tiered_runs = run_all(run_tiered_fn(tiered), records)
+        tiered_report = build_report(
+            f"tiered (4B, τ={config.tiered_threshold})", tiered_runs, 0.0, 0.0
+        )
+        tiered_report["tiered"] = tiered_summary(tiered_runs, claude_cost)
+        reports.append(tiered_report)
 
     config.reports_dir.mkdir(parents=True, exist_ok=True)
     stamp = date.today().isoformat()
