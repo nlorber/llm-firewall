@@ -166,8 +166,8 @@ for the techniques and [docs/DECISIONS.md](docs/DECISIONS.md) for every trade-of
 
 | Backend | Privacy / offline | Accuracy | Cost / latency | Failure mode |
 |---|---|---|---|---|
-| `claude` | none — every gray prompt leaves the machine | full (the teacher) | API $ per call; ~1.7 s | 500 / error |
-| `local` | **full** — nothing leaves | reduced (no teacher recovery) | ~$0, on-device | fail-closed → BLOCK |
+| `claude` | none — every gray prompt leaves the machine | full (the teacher) | API $ per call; ~2 s | 500 / error |
+| `local` | **full** — nothing leaves | strong but stricter — 90% match, 85% benign-PASS; no teacher recovery | ~$0, on-device | fail-closed → BLOCK |
 | `tiered` | **partial** — leaks at the escalation rate (the most uncertain prompts are exactly the ones sent to Claude) | recovered toward the teacher | blended: ~$0 + Claude $ × escalation; slower than Claude | escalate; else 500 |
 
 `tiered` does **not** give the privacy/offline guarantee — only `local` does; the leakage is
@@ -178,24 +178,32 @@ Claude teacher, with the always-BLOCK failure mode visible in *Benign-PASS*):
 
 | Judge | Decision-match | BLOCK recall | Benign-PASS | Schema-valid | Latency p50 | Cost/call |
 |---|---|---|---|---|---|---|
-| Claude (teacher) | 98.9% | 98.4% | 100% | 100% | 1.69 s | $0.00086 |
-| base Qwen3-1.7B | 66.7% | 90.6% | 7.7% | 96.7% | 1.6 s | $0 |
-| base Qwen3-4B | 72.2% | 81.2% | 50.0% | 100% | 1.6 s | $0 |
-| fine-tuned 1.7B | 70.0% | 98.4% | **0.0%** (collapsed) | 98.9% | 2.5 s | $0 |
-| fine-tuned 4B | 78.9% | 98.4% | 30.8% | 100% | 3.1 s | $0 |
-| **tiered (4B, τ=0.5)** | **94.4%** | **98.4%** | **84.6%** | 100% | 2.4 s | **$0.00036** |
+| Claude (teacher) | 95.6% | 93.8% | 100% | 100% | 2.0 s | $0.00086 |
+| base Qwen3-1.7B | 70.0% | 96.9% | 3.8% | 97.8% | 0.6 s | $0 |
+| base Qwen3-4B | 75.6% | 82.8% | 57.7% | 100% | 1.0 s | $0 |
+| fine-tuned 1.7B | 70.0% | 98.4% | **0.0%** (collapsed) | 98.9% | 0.8 s | $0 |
+| **fine-tuned 4B** (rank 32) | **90.0%** | 92.2% | **84.6%** | 100% | 3.1 s | $0 |
+| **tiered (4B, τ=0.5)** | **94.4%** | **96.9%** | **88.5%** | 100% | 2.8 s | **$0.00016** |
 
-**The evaluated decision — is it worth it?** Yes, *as a tiered system*. Escalating the
-uncertain **42%** of gray-zone verdicts (100% of them genuine-uncertainty, via a
-decision-token logprob signal — val AUC 0.681, vs 0.481 for the model's emitted confidence)
-recovers benign-PASS **30.8% → 84.6%** and decision-match **78.9% → 94.4%**, toward the
-teacher, while holding BLOCK recall at 98.4%. Blended cost is **~42% of all-Claude**, with
-**58% of verdicts staying on-device**. The concession is honest: **it's slower than Claude**
-(2.4 s vs 1.7 s) because the local model's verbose reasoning isn't short-circuited — tiering
-here buys **cost + privacy + near-teacher quality, not latency**.
+**The evaluated decision — is it worth it?** Yes, and on two levels. The **standalone**
+distilled 4B is now a genuinely usable on-device judge — **90% decision-match, 92% BLOCK
+recall, 85% benign-PASS, $0** — but getting there took *capacity*: a rank-8 adapter collapsed
+to ~35% specificity (over-blocking); **rank-32 across all 36 layers** was needed to learn the
+benign boundary. Composed as a **tiered** judge, escalating only the uncertain **19%** of
+verdicts (all genuine-uncertainty, via a decision-token logprob signal — val AUC 0.681 vs
+0.481 for the model's emitted confidence) closes the residual gap toward the teacher —
+**94.4% match, 96.9% recall, 88.5% benign-PASS** — at a blended cost of **~19% of all-Claude**
+with **81% of verdicts staying on-device**. The honest concession is latency: both are slower
+than Claude (2.8 s tiered / 3.1 s local vs 2.0 s) because the local model's verbose reasoning
+isn't short-circuited — tiering buys **cost + privacy + near-teacher quality, not speed**.
 
-Standalone, the **4B distills** (BLOCK recall 81→98%, specificity held) but the **1.7B is
-too small and collapses** to always-BLOCK (0% specificity) — a clean capacity finding.
+Two findings from pushing the local model further: **(1) capacity, not balance, was the
+lever** — a 50/50 retrain didn't move specificity, but raising adapter capacity did; and the
+**1.7B is simply too small** and collapses to always-BLOCK regardless. **(2) The teacher sets
+the operating point** — distilling from Sonnet (a cleaner, more lenient judge that corrected
+10 of 14 of Haiku's benign false-blocks) yields a student with *higher* specificity (90%) but
+*lower* recall (88%); Haiku's stricter labels favor recall. For a firewall, where a missed
+BLOCK is the costly error, the **Haiku-distilled model is deployed**.
 
 **Caveats, stated plainly:** these are *teacher-agreement* numbers, not a safety guarantee —
 a Claude mistake is invisible to them. The independent ground-truth read (the **staleness

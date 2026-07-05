@@ -33,12 +33,13 @@ Adversarial prompt engineering evolves faster than any fixed classifier can adap
 
 There is, however, a middle ground between "always call Claude" and "never call Claude":
 **distil** the Claude judge into a small local model, run it first, and **escalate only the
-uncertain verdicts** back to Claude. We built and measured exactly this (§9). The answer is
-nuanced: a standalone distilled 4B recovers most of Claude's BLOCK recall but over-blocks
-benign gray-zone prompts (specificity ~30–50%), so it isn't a safe drop-in on its own — but
-the **tiered** judge escalates the uncertain ~40% and recovers specificity to ~85% at ~40% of
-Claude's cost, keeping most traffic on-device. So the honest position is: don't fine-tune to
-*avoid* the LLM, fine-tune to *ration* it. See §9 and [CONCEPTS.md](CONCEPTS.md).
+uncertain verdicts** back to Claude. We built and measured exactly this (§9). Given enough
+adapter capacity, the standalone distilled 4B is a usable on-device judge (90% decision-match,
+92% BLOCK recall, 85% benign-PASS, $0); composed as a **tiered** judge it escalates only the
+uncertain ~19% of verdicts to reach near-teacher quality (94% match, 97% recall, 88%
+specificity) at ~19% of Claude's cost, keeping most traffic on-device. So the honest position
+is: don't fine-tune to *avoid* the LLM, fine-tune to *ration* it. See §9 and
+[CONCEPTS.md](CONCEPTS.md).
 
 ---
 
@@ -250,6 +251,20 @@ specificity). The fix is a **benign-gray top-up**: benign prompts wearing attack
 features (security questions asked for defense, dual-use, quoted-not-enacted jailbreaks). Only
 ~3% land in GRAY (the classifier is confident on benign text), but enough to rebalance to
 71/29 and to give the test set enough PASS examples to *measure* specificity.
+
+### What actually moves specificity: capacity, and the teacher's temperament
+
+Two findings from pushing the standalone model past its initial ~35% specificity (it
+over-blocked benign gray-zone prompts). First, **capacity, not class balance, was the lever**:
+a 50/50-balanced retrain didn't move specificity, but raising the LoRA adapter from rank 8 /
+last-8-layers to **rank 32 / all 36 layers** lifted benign-PASS to ~85% while holding ~92%
+recall — the small adapter simply couldn't represent the benign/malicious boundary. (The
+larger adapter destabilizes at the original `lr` 1e-4 and needs 3e-5.) The **1.7B collapses
+regardless** — it is too small for this boundary. Second, **the teacher sets the
+recall/specificity operating point**: re-distilling from Sonnet (a cleaner, more lenient judge
+that corrected 10 of 14 of Haiku's benign false-blocks) produces a student with *higher*
+specificity (90%) but *lower* recall (88%); Haiku's stricter labels favor recall. Since a
+firewall pays most for a missed BLOCK, the **Haiku-distilled, high-capacity model is deployed**.
 
 ### Tiered design
 

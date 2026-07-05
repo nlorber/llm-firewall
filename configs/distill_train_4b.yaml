@@ -1,5 +1,11 @@
 # mlx-lm LoRA config — distil the Claude judge into Qwen3-4B-Instruct-2507 (inherently
 # non-thinking). Run via `make distill-train-4b`. Mirrors the 1.7B config; see it for notes.
+#
+# High-capacity settings (rank 32, all 36 layers): a rank-8 / 8-layer adapter could not learn
+# the benign/malicious boundary and collapsed to ~35% specificity (over-blocking). Raising
+# capacity lifted benign-PASS to ~85% while holding ~94% BLOCK recall. The bigger adapter is
+# unstable at the 1.7B's lr=1e-4 (val loss diverges), so lr is lowered to 3e-5. Best checkpoint
+# is ~iter 100 by val loss (it overfits after) — select it, don't take the final.
 
 model: "mlx-community/Qwen3-4B-Instruct-2507-4bit"
 train: true
@@ -10,13 +16,13 @@ seed: 42
 # Training parameters
 batch_size: 4
 iters: 300
-learning_rate: 1e-4
+learning_rate: 3e-5
 max_seq_length: 1024
-num_layers: 8
+num_layers: 36
 
 # LoRA parameters
 lora_parameters:
-  rank: 8
+  rank: 32
   dropout: 0.05
   scale: 16.0
 
