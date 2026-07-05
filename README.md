@@ -121,7 +121,7 @@ uv run firewall-robustness --model-path models/classifier \
 
 ### Explainability
 
-SHAP token-level attributions highlight which tokens drove the classifier's decision. Red tokens push toward the predicted class; blue tokens push away. See `notebooks/03_explainability.ipynb` for all five threat classes.
+SHAP token-level attributions highlight which tokens drove the classifier's decision, on a fixed **benign↔threat** axis: **red tokens push the prompt toward BLOCK** (threat), **blue tokens push toward benign**. This is more useful for a security audit than colouring by the predicted class — the colour means the same thing on every example ("what made this look malicious?") regardless of which threat class won. See `notebooks/03_explainability.ipynb` for all five threat classes.
 
 ![SHAP token attribution](reports/shap_example.png)
 
@@ -161,6 +161,18 @@ run the local model first, and escalate only the *uncertain* verdicts to Claude.
 is a selectable `judge_backend` (`claude` default · `local` · `tiered`) — the evaluated
 engineering decision, not just "I fine-tuned a model." See [docs/CONCEPTS.md](docs/CONCEPTS.md)
 for the techniques and [docs/DECISIONS.md](docs/DECISIONS.md) for every trade-off.
+
+The `tiered` flow lives *inside* the single `judge_node` (a `TieredJudge` composite — the
+LangGraph topology is unchanged):
+
+```mermaid
+flowchart LR
+    G[GRAY prompt] --> SLM[local SLM<br/>decode decision + read logprob signal]
+    SLM -->|confident| KEEP[keep local verdict · $0, on-device]
+    SLM -->|uncertain / invalid / error| ESC[escalate to Claude]
+    KEEP --> V[verdict]
+    ESC --> V[verdict]
+```
 
 **Three configurations, honestly compared:**
 

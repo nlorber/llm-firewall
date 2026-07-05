@@ -9,11 +9,20 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import torch
 import yaml
 
-from firewall.classifier.explain import plot_attention_heatmap
+from firewall.classifier.explain import block_push_scores, plot_attention_heatmap
 from firewall.classifier.train import train
+
+
+def test_block_push_scores_projects_onto_benign_threat_axis() -> None:
+    # Columns are [benign, injection]; token 0 raises benign (→ safe), token 1 lowers it (→ block).
+    shap = np.array([[0.4, -0.1], [-0.3, 0.2]])
+    scores = block_push_scores(shap, benign_index=0)
+    assert scores[0] == -0.4  # raised benign → negative (toward benign)
+    assert scores[1] == 0.3  # lowered benign → positive (toward BLOCK)
 
 
 def test_train_wires_config_into_training_arguments(tmp_path) -> None:
