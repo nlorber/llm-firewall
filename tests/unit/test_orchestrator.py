@@ -229,6 +229,23 @@ class TestJudgeNode:
         assert update["judge_result"]["tier"] == "local"
         assert update["judge_result"]["reason"] == "none"
 
+    def test_judge_node_records_local_tier_for_local_judge(self) -> None:
+        # A plain LocalJudge resolves on-device; the node must record tier="local" so the demo
+        # UI attributes it correctly instead of falling back to "resolved by Claude judge".
+        from firewall.judge.local_judge import LocalJudge
+
+        local = LocalJudge("fake-model")
+        local.judge = MagicMock(return_value=JudgeVerdict("BLOCK", "on-device", 0.7))
+        nodes_mod.init_nodes(classifier=_mock_classifier("benign", 0.1), judge=local)
+        state = {
+            **_make_state("p"),
+            "classification": {"label": "injection", "scores": {"injection": 0.55}},
+        }
+        update = nodes_mod.judge_node(state)
+        assert update["judge_result"]["decision"] == "BLOCK"
+        assert update["judge_result"]["tier"] == "local"  # on-device provenance, not Claude
+        assert update["judge_result"]["reason"] is None  # no escalation decision for plain local
+
     def test_judge_node_passes_classification_to_judge(self) -> None:
         mock_judge = MagicMock()
         mock_judge.judge.return_value = JudgeVerdict(

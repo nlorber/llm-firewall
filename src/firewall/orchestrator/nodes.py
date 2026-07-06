@@ -9,7 +9,8 @@ if TYPE_CHECKING:
     from firewall.classifier.model import FirewallClassifier
     from firewall.judge.base import Judge
 
-from firewall.judge.tiered import TieredJudge
+from firewall.judge.local_judge import LocalJudge
+from firewall.judge.tiered import Tier, TieredJudge
 from firewall.orchestrator.metrics import (
     classification_label_total,
     classify_duration,
@@ -94,7 +95,9 @@ def judge_node(state: FirewallState) -> dict[str, Any]:
     if clf is None:
         raise RuntimeError("classify_node must run before judge_node")
     start = time.perf_counter()
-    # A TieredJudge carries tier provenance via decide(); any plain Judge only has judge().
+    # A TieredJudge carries tier provenance via decide(); a plain LocalJudge resolves
+    # entirely on-device, so we record tier="local" for it too — otherwise the demo UI
+    # falls back to attributing the on-device verdict to the Claude judge.
     tier: str | None = None
     reason: str | None = None
     if isinstance(_judge, TieredJudge):
@@ -106,13 +109,16 @@ def judge_node(state: FirewallState) -> dict[str, Any]:
         verdict = outcome.verdict
         tier = str(outcome.tier)
         reason = str(outcome.reason)
-        judge_tier_total.labels(tier=tier).inc()
     else:
         verdict = _judge.judge(
             prompt=state["prompt"],
             classification_label=clf["label"],
             scores=clf["scores"],
         )
+        if isinstance(_judge, LocalJudge):
+            tier = str(Tier.LOCAL)
+    if tier is not None:
+        judge_tier_total.labels(tier=tier).inc()
     elapsed = time.perf_counter() - start
     judge_duration.labels(decision=verdict.decision).observe(elapsed)
     return {

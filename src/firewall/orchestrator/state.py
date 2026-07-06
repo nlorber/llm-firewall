@@ -24,7 +24,9 @@ class JudgeResult(TypedDict):
     decision: str  # "PASS" | "BLOCK"
     reasoning: str
     confidence: float  # judge's self-reported confidence in [0, 1]
-    # Tiered backend only: which tier answered ("local"/"claude") and the escalation reason.
+    # Which tier answered ("local"/"claude"): set by the tiered backend (both tiers) and the
+    # local backend (always "local"); None for the claude backend. ``reason`` is the tiered
+    # escalation reason, set only by the tiered backend.
     tier: NotRequired[str | None]
     reason: NotRequired[str | None]
 
