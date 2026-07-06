@@ -48,22 +48,31 @@ _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?\s*```$", re.DOTALL)
 def parse_verdict(raw: str) -> JudgeVerdict:
     """Parse a raw judge response string into a JudgeVerdict.
 
+    Every malformed-output shape normalizes to ``ValueError`` (``json.JSONDecodeError``,
+    its subclass, for non-JSON). This is load-bearing for the fail-closed policy: callers
+    catch ``ValueError`` to fall back to BLOCK, so valid-JSON-but-wrong-shape output — a bare
+    ``"PASS"`` string, a ``["PASS"]`` list, ``"confidence": null`` — must not leak out as a
+    ``TypeError`` that bypasses those handlers and 500s the request.
+
     Raises:
-        json.JSONDecodeError: if the (de-fenced) text is not valid JSON.
-        KeyError: if a required field is absent.
-        ValueError: if ``decision`` is not PASS or BLOCK (or confidence isn't a float).
+        ValueError: if the text is not valid JSON, is not a JSON object, is missing a
+            required field, ``decision`` is not the string PASS/BLOCK, or ``confidence``
+            is not coercible to a float.
     """
     fence_match = _CODE_FENCE_RE.match(raw)
     cleaned = fence_match.group(1).strip() if fence_match else raw
     data = json.loads(cleaned)
-    decision = data["decision"]
-    if decision not in {"PASS", "BLOCK"}:
+    if not isinstance(data, dict):
+        raise ValueError(f"judge output is not a JSON object: {cleaned!r}")
+    try:
+        decision = data["decision"]
+        reasoning = data["reasoning"]
+        confidence = float(data["confidence"])
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f"malformed judge verdict: {cleaned!r}") from exc
+    if not isinstance(decision, str) or decision not in {"PASS", "BLOCK"}:
         raise ValueError(f"unexpected judge decision: {decision!r}")
-    return JudgeVerdict(
-        decision=decision,
-        reasoning=data["reasoning"],
-        confidence=float(data["confidence"]),
-    )
+    return JudgeVerdict(decision=decision, reasoning=reasoning, confidence=confidence)
 
 
 class ChatMessage(TypedDict):

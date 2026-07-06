@@ -92,6 +92,16 @@ class TestLocalJudgeTiering:
         assert result.verdict is None
         assert result.signal == 1.0
 
+    def test_thinking_leak_is_invalid_and_escalates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Reasoning leakage is invalid output → maximally uncertain so the composite escalates.
+        judge = LocalJudge("fake-model")
+        leaked = '<think>reason</think>{"decision":"PASS","reasoning":"x","confidence":0.7}'
+        monkeypatch.setattr(judge, "_generate", _fixed(leaked))
+        result = judge.judge_for_tiering("x", "injection", {"injection": 0.5})
+        assert not result.valid
+        assert result.verdict is None
+        assert result.signal == 1.0
+
     def test_satisfies_tiering_local_judge_protocol(self) -> None:
         from firewall.judge.tiered import TieringLocalJudge
 
@@ -158,6 +168,18 @@ class TestLocalJudgeNonThinking:
         monkeypatch.setattr(judge, "_generate", _fixed(leaked))
         with pytest.raises(ThinkingModeError, match="think"):
             judge.judge("hello", "benign", {"benign": 0.45})
+
+    def test_non_empty_think_block_fails_closed_when_on_failure_block(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A gray-zone prompt could bait the model into echoing <think>: ThinkingModeError
+        # must not escape the on_failure="block" policy (attacker-influenceable 500).
+        judge = LocalJudge("fake-model", on_failure="block")
+        leaked = '<think>reason</think>{"decision":"PASS","reasoning":"x","confidence":0.7}'
+        monkeypatch.setattr(judge, "_generate", _fixed(leaked))
+        verdict = judge.judge("hello", "benign", {"benign": 0.45})
+        assert verdict.decision == "BLOCK"
+        assert verdict.confidence == pytest.approx(1.0)
 
     def test_tolerates_empty_think_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Qwen3-4B-Instruct fine-tunes reproduce the template's empty <think></think> in the

@@ -147,24 +147,27 @@ class LocalJudge:
             raw, logprob_signal = self._generate_with_signal(messages)
         try:
             verdict = parse_verdict(strip_and_check_thinking(raw))
-        except (ValueError, KeyError):
+        except (ValueError, ThinkingModeError):
             return LocalResult(verdict=None, signal=1.0, valid=False)
         signal = (1.0 - verdict.confidence) if logprob_signal is None else logprob_signal
         return LocalResult(verdict=verdict, signal=signal, valid=True)
 
     def _parse_or_recover(self, raw: str, messages: list[ChatMessage]) -> JudgeVerdict:
-        """Parse the greedy output; on schema failure optionally resample once, then
-        apply the failure policy. A temp-0 retry would reproduce identical invalid output,
-        so recovery (when enabled) resamples at ``resample_temp`` > 0.
+        """Parse the greedy output; on failure optionally resample once, then apply the
+        failure policy. Covers both schema errors and thinking-mode leakage: with
+        ``on_failure="block"`` either mode fails closed to BLOCK, so an attacker-baited
+        ``<think>`` block cannot escape the policy as an uncaught exception. A temp-0 retry
+        would reproduce identical invalid output, so recovery (when enabled) resamples at
+        ``resample_temp`` > 0.
         """
         try:
             return parse_verdict(strip_and_check_thinking(raw))
-        except (ValueError, KeyError) as first_exc:
+        except (ValueError, ThinkingModeError) as first_exc:
             if self._resample_temp is not None:
                 retry_raw = self._generate(messages, temp=self._resample_temp)
                 try:
                     return parse_verdict(strip_and_check_thinking(retry_raw))
-                except (ValueError, KeyError):
+                except (ValueError, ThinkingModeError):
                     pass
             if self._on_failure == "block":
                 return JudgeVerdict(
@@ -172,6 +175,8 @@ class LocalJudge:
                     reasoning="local judge produced no valid verdict; failing closed",
                     confidence=1.0,
                 )
+            if isinstance(first_exc, ThinkingModeError):
+                raise  # surface reasoning leakage distinctly when not failing closed
             raise ValueError(f"local judge produced invalid verdict: {raw!r}") from first_exc
 
     # The methods below are the only place MLX is touched; they are exercised by the

@@ -36,6 +36,22 @@ class TestParseVerdict:
         raw = json.dumps({"decision": "BLOCK", "reasoning": "t", "confidence": 1.5})
         assert parse_verdict(raw).confidence == pytest.approx(1.5)
 
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            '"PASS"',  # JSON string, not an object
+            '["PASS"]',  # JSON array, not an object
+            '{"decision": "PASS", "reasoning": "x", "confidence": null}',  # null confidence
+            '{"reasoning": "x", "confidence": 0.5}',  # missing decision
+            '{"decision": ["PASS"], "reasoning": "x", "confidence": 0.5}',  # decision not a string
+        ],
+    )
+    def test_wrong_shape_normalizes_to_value_error(self, raw: str) -> None:
+        # Valid JSON of the wrong shape must raise ValueError, never a TypeError that would
+        # slip past callers' fail-closed ``except ValueError`` handlers and 500 the request.
+        with pytest.raises(ValueError):  # noqa: PT011 — several distinct messages
+            parse_verdict(raw)
+
 
 class TestBuildJudgeMessages:
     def test_returns_system_then_user_with_nonce_boundary(self) -> None:
