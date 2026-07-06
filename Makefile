@@ -1,4 +1,4 @@
-.PHONY: setup train evaluate distill-data distill-topup distill-train-1.7b distill-train-4b distill-eval distill-staleness serve test lint format clean docker-build
+.PHONY: setup train evaluate distill-data distill-topup distill-train-1.7b distill-train-4b distill-eval distill-staleness serve test lint typecheck format clean docker-build
 
 ## Install all dependencies with uv and set up pre-commit hooks
 setup:
