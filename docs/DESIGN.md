@@ -279,6 +279,9 @@ confidence, not its own uncertainty. The signal that works reads the model's **d
 logprobs** — the probabilities of the `PASS` and `BLOCK` tokens at the JSON decision position
 — and measures how close they are (val AUC 0.681). The threshold τ is fit on **val** and all
 tiered metrics reported on **test**; at τ=0.5 the signal escalates **18.9%** of verdicts on test.
+(The val-AUC comparison and the τ fit come from an **ad-hoc** sweep over the val split — using
+`firewall.judge.distill.metrics.auc` — not a committed pipeline step; they are point estimates,
+reproducible from the corpus but not re-run by `make distill-eval`.)
 
 **Determinism & failure semantics:** local inference is greedy/temp-0. `local`-only fails
 closed to BLOCK on unrecoverable output; `tiered` escalates local failures to Claude; `claude`
