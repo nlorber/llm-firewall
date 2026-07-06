@@ -130,6 +130,11 @@ class TestFactory:
         )
         llm.assert_called_once()
 
+    def test_tiered_rejects_invalid_signal_mode(self) -> None:
+        # A typo'd escalation_signal must fail loudly, not silently fall through to the margin.
+        with pytest.raises(ValueError, match="invalid escalation signal"):
+            make_judge("tiered", local_model="base", signal_mode="logprob")  # type: ignore[arg-type]
+
     def test_local_requires_model(self) -> None:
         with pytest.raises(ValueError, match="requires local_model"):
             make_judge("local")
