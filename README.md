@@ -224,8 +224,10 @@ blocks 19 of 20 attacks before the judge sees them, so only **N=1** reaches the 
 directionally clean (all judges BLOCK it) but not statistically meaningful. Exact figures
 also wobble run-to-run (MLX/Claude non-determinism on borderline cases); the directions hold.
 
-Reproduce: `make distill-data` → `make distill-train-4b` → `make distill-eval` (Mac + the
-`distill` extra); `make distill-staleness` for the safety probe.
+Reproduce: `make distill-data` → `make distill-train-4b` → **pick the best checkpoint by
+validation loss** (≈iter 100 — training overfits past it, so the deployed adapter is *not*
+the final checkpoint; point `local_judge_adapter_path` at the selected one) → `make
+distill-eval` (Mac + the `distill` extra); `make distill-staleness` for the safety probe.
 
 ## Quick Start
 
