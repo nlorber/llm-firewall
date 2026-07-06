@@ -14,6 +14,7 @@ from firewall.judge.distill.data import (
     dedupe_candidates,
     generate_benign_gray,
     generate_borderline,
+    generate_candidates,
     generate_coercion,
     load_raw_candidates,
     stratified_split_by_decision,
@@ -98,6 +99,26 @@ def _mock_client(batches: list[list[str]]) -> MagicMock:
         responses.append(msg)
     client.messages.create.side_effect = responses
     return client
+
+
+def _raw_client(raw_texts: list[str]) -> MagicMock:
+    """A client returning each raw response verbatim (to exercise malformed-batch parsing)."""
+    client = MagicMock()
+    client.messages.create.side_effect = [
+        MagicMock(content=[MagicMock(text=text)]) for text in raw_texts
+    ]
+    return client
+
+
+def test_generate_candidates_skips_malformed_batches() -> None:
+    # A single-line fenced response (IndexError on split) and invalid JSON must be skipped,
+    # not abort the whole paid generation — mirroring the start == -1 guard.
+    client = _raw_client(['```["a"]```', "[bad, json]", '["good1", "good2"]'])
+    out = generate_candidates(
+        client, model="m", instruction="i", provenance="gen", n=9, batch_size=3
+    )
+    assert [c.text for c in out] == ["good1", "good2"]
+    assert all(c.provenance == "gen" for c in out)
 
 
 def test_generate_borderline_collects_and_tags() -> None:

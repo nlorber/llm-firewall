@@ -147,12 +147,16 @@ def generate_candidates(
             ],
         )
         raw = response.content[0].text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        start, end = raw.find("["), raw.rfind("]")
-        if start == -1 or end == -1:
-            continue
-        for text in json.loads(raw[start : end + 1]):
+        try:
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            start, end = raw.find("["), raw.rfind("]")
+            if start == -1 or end == -1:
+                continue
+            parsed = json.loads(raw[start : end + 1])
+        except (IndexError, json.JSONDecodeError):
+            continue  # one malformed batch shouldn't abort the whole (paid) generation
+        for text in parsed:
             out.append(Candidate(text=str(text).strip(), provenance=provenance))
     return out[:n]
 
