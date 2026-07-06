@@ -194,6 +194,23 @@ def generate_benign_gray(client: Any, model: str, n: int, batch_size: int) -> li
     )
 
 
+def dedupe_candidates(candidates: list[Candidate]) -> list[Candidate]:
+    """Drop exact-duplicate texts, keeping the first occurrence (so raw wins over generated).
+
+    ``load_raw_candidates`` dedupes within raw and ``topup_corpus`` dedupes its slice, but the
+    borderline + coercion generations can repeat a narrow theme across batches and collide with
+    each other or with raw. An exact repeat would be teacher-labeled twice (paid) and can land on
+    both sides of the train/test split, inflating fine-tuned agreement numbers.
+    """
+    seen: set[str] = set()
+    unique: list[Candidate] = []
+    for cand in candidates:
+        if cand.text not in seen:
+            seen.add(cand.text)
+            unique.append(cand)
+    return unique
+
+
 def teacher_label(judge: Judge, gray: list[GrayCandidate]) -> list[dict[str, Any]]:
     """Run the teacher judge on each GRAY candidate and assemble an SFT record.
 
@@ -282,7 +299,12 @@ def build_corpus(
         config.n_generated_coercion,
         config.generation_batch_size,
     )
-    print(f"[distill-data] sourced {len(candidates)} candidates; classifying (CPU, batched)...")
+    sourced = len(candidates)
+    candidates = dedupe_candidates(candidates)
+    print(
+        f"[distill-data] sourced {sourced} candidates ({len(candidates)} unique); "
+        "classifying (CPU, batched)..."
+    )
     gray = classify_and_filter_gray(
         classifier, candidates, config.clean_threshold, config.block_threshold
     )

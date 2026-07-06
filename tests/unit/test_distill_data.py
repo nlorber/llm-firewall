@@ -11,6 +11,7 @@ from firewall.judge.distill.data import (
     GrayCandidate,
     build_corpus,
     classify_and_filter_gray,
+    dedupe_candidates,
     generate_benign_gray,
     generate_borderline,
     generate_coercion,
@@ -121,6 +122,17 @@ def test_generate_benign_gray_tags_benign_gray() -> None:
     assert len(out) == 2
 
 
+def test_dedupe_candidates_keeps_first_occurrence_across_sources() -> None:
+    cands = [
+        Candidate("dup", "raw"),
+        Candidate("only-gen", "gen"),
+        Candidate("dup", "gen"),  # collides with the raw one
+        Candidate("dup", "coercion"),  # and again across generators
+    ]
+    out = dedupe_candidates(cands)
+    assert [(c.text, c.provenance) for c in out] == [("dup", "raw"), ("only-gen", "gen")]
+
+
 class _FakeJudge:
     """Returns a fixed verdict per prompt text."""
 
@@ -194,6 +206,41 @@ def test_build_corpus_writes_splits_and_caps(tmp_path: Path) -> None:
     assert (cfg.output_dir / "test.jsonl").exists()
     assert (cfg.output_dir / "manifest.json").exists()
     assert counts["train"] + counts["val"] + counts["test"] == 8
+
+
+def test_build_corpus_dedupes_generations_against_raw(tmp_path: Path) -> None:
+    # A borderline generation repeats the raw "shared" text: it must be labeled once, not
+    # twice (paid), and must not be able to straddle the train/test split.
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "r.jsonl").write_text('{"text": "shared", "label": "injection"}\n')
+    cfg = DistillConfig(
+        raw_dir=raw,
+        output_dir=tmp_path / "out",
+        clean_threshold=0.3,
+        block_threshold=0.8,
+        classifier_path="x",
+        classifier_max_length=512,
+        generation_model="m",
+        teacher_model="m",
+        teacher_temperature=0.0,
+        target_gray_total=20,
+        n_generated_borderline=4,
+        n_generated_coercion=4,
+        generation_batch_size=4,
+        val_ratio=0.25,
+        test_ratio=0.25,
+        seed=42,
+    )
+    texts = ["shared", "g1", "g2", "g3", "c1", "c2", "c3", "c4"]
+    clf = _FakeClassifier({t: {"benign": 0.5, "injection": 0.5} for t in texts})
+    client = _mock_client([["shared", "g1", "g2", "g3"], ["c1", "c2", "c3", "c4"]])
+    judge = _FakeJudge(
+        {t: JudgeVerdict("BLOCK" if i % 2 else "PASS", "r", 0.6) for i, t in enumerate(texts)}
+    )
+    counts = build_corpus(cfg, clf, judge, client)
+    assert counts["gray_total"] == 8  # 9 sourced, the duplicate "shared" collapsed to 8 unique
+    assert counts["by_provenance"] == {"raw": 1, "gen": 3, "coercion": 4}  # "shared" kept as raw
 
 
 def _rec(text: str, decision: str, provenance: str) -> dict[str, object]:
