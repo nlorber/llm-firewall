@@ -375,7 +375,7 @@ def main() -> None:  # pragma: no cover
         assert isinstance(tiered, TieredJudge)  # the "tiered" backend always builds one
         tiered_runs = run_all(run_tiered_fn(tiered), records)
         tiered_report = build_report(
-            f"tiered (4B, τ={config.tiered_threshold})", tiered_runs, 0.0, 0.0
+            f"tiered ({tiered_fm.name}, τ={config.tiered_threshold})", tiered_runs, 0.0, 0.0
         )
         tiered_report["tiered"] = tiered_summary(tiered_runs, claude_cost)
         reports.append(tiered_report)
