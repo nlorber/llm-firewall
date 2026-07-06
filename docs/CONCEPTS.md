@@ -49,8 +49,9 @@ adapter) using **affine group quantization**, *not* the QLoRA paper's NF4 + doub
 quantization (which is bitsandbytes/CUDA). Same idea — memory-efficient adaptation of a
 quantized base — different quantizer.
 
-`rank` sets the adapter's capacity (8 is ample for a JSON-verdict task); `scale` (α) scales
-its contribution.
+`rank` sets the adapter's capacity; `scale` (α) scales its contribution. Capacity turned out
+to be the binding constraint here — rank 8 under-fit the benign/malicious boundary and
+collapsed to ~35% specificity, so this project needed **rank 32** across all 36 layers.
 
 ## Chat templates and the empty `<think>` artifact
 
