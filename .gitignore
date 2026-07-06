@@ -26,7 +26,8 @@ data/distill/*
 !data/distill/.gitkeep
 # Generated distillation eval reports (regenerated after training; final numbers go in docs)
 reports/distill_eval_*
-# LoRA training outputs (checkpoint churn); a final showcase adapter is force-added later
+# LoRA training outputs (checkpoint churn). The deployed adapter is a 250 MB+ binary, so it
+# is not committed — reproduce it via the README's distill steps (local/tiered fail fast without it).
 adapters/
 models/*
 !models/.gitkeep
