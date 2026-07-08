@@ -199,37 +199,24 @@ run these numbers are drawn from, with 95% Wilson CIs and per-provenance breakdo
 | **fine-tuned 4B** (rank 32) | **90.0%** | 92.2% | **84.6%** | 100% | 3.1 s | $0 |
 | **tiered (4B, τ=0.5)** | **94.4%** | **96.9%** | **88.5%** | 100% | 2.8 s | **$0.00016** |
 
-**The evaluated decision — is it worth it?** Yes, and on two levels. The **standalone**
-distilled 4B is now a genuinely usable on-device judge — **90% decision-match, 92% BLOCK
-recall, 85% benign-PASS, $0** — but getting there took *capacity*: a rank-8 adapter collapsed
-to ~35% specificity (over-blocking); **rank-32 across all 36 layers** was needed to learn the
-benign boundary. Composed as a **tiered** judge, escalating only the uncertain **19%** of
-verdicts (all genuine-uncertainty, via a decision-token logprob signal — val AUC 0.681 vs
-0.481 for the model's emitted confidence) closes the residual gap toward the teacher —
-**94.4% match, 96.9% recall, 88.5% benign-PASS** — at a blended cost of **~19% of all-Claude**
-with **81% of verdicts staying on-device**. The honest concession is latency: both are slower
-than Claude (2.8 s tiered / 3.1 s local vs 2.0 s) because the local model's verbose reasoning
-isn't short-circuited — tiering buys **cost + privacy + near-teacher quality, not speed**.
+**The verdict: worth it, on two levels.** Standalone, the distilled 4B is a genuinely
+usable on-device judge — **90% decision-match, 85% benign-PASS, $0** — once given enough
+adapter capacity (**rank 32 across all 36 layers**; a rank-8 adapter collapsed to ~35%
+specificity, and the 1.7B collapses to always-BLOCK regardless). Tiered on top of it,
+escalating only the genuinely-uncertain **19%** of verdicts (a decision-token logprob
+signal — val AUC 0.681 vs 0.481 for the model's emitted confidence) closes the gap to
+near-teacher quality — **94.4% match, 96.9% recall, 88.5% benign-PASS** — at **~19% of
+all-Claude cost, 81% on-device**. The honest concessions: latency (2.8–3.1 s vs Claude's
+2.0 s — the local reasoning isn't short-circuited), and these are *teacher-agreement*
+numbers, not a safety guarantee (the independent staleness probe is underpowered: the
+classifier blocks 19/20 attacks before the judge ever sees them). The full findings —
+why capacity, not class balance, was the lever, and how the choice of teacher sets the
+recall/specificity operating point — live in [docs/DECISIONS.md](docs/DECISIONS.md).
 
-Two findings from pushing the local model further: **(1) capacity, not balance, was the
-lever** — a 50/50 retrain didn't move specificity, but raising adapter capacity did; and the
-**1.7B is simply too small** and collapses to always-BLOCK regardless. **(2) The teacher sets
-the operating point** — distilling from Sonnet (a cleaner, more lenient judge that corrected
-10 of 14 of Haiku's benign false-blocks) yields a student with *higher* specificity (90%) but
-*lower* recall (88%); Haiku's stricter labels favor recall. For a firewall, where a missed
-BLOCK is the costly error, the **Haiku-distilled model is deployed**.
-
-**Caveats, stated plainly:** these are *teacher-agreement* numbers, not a safety guarantee —
-a Claude mistake is invisible to them. The independent ground-truth read (the **staleness
-probe** on `data/adversarial/`) is currently **underpowered**: the classifier confidently
-blocks 19 of 20 attacks before the judge sees them, so only **N=1** reaches the gray band —
-directionally clean (all judges BLOCK it) but not statistically meaningful. Exact figures
-also wobble run-to-run (MLX/Claude non-determinism on borderline cases); the directions hold.
-
-Reproduce: `make distill-data` → `make distill-train-4b` → **pick the best checkpoint by
-validation loss** (≈iter 100 — training overfits past it, so the deployed adapter is *not*
-the final checkpoint; point `local_judge_adapter_path` at the selected one) → `make
-distill-eval` (Mac + the `distill` extra); `make distill-staleness` for the safety probe.
+Reproduce (Mac + the `distill` extra): `make distill-data` → `make distill-train-4b` →
+**pick the best checkpoint by validation loss** (≈iter 100; training overfits past it —
+point `local_judge_adapter_path` at the selected checkpoint) → `make distill-eval`;
+`make distill-staleness` for the safety probe.
 
 ## Quick Start
 

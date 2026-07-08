@@ -2,8 +2,9 @@
 
 Every non-obvious choice in distilling the Claude gray-zone judge into a local SLM and
 composing it as a tiered judge, with the rationale and the alternative rejected. Numbers
-are from the eval reports (`reports/distill_eval_baselines_*`); run-to-run MLX/Claude
-non-determinism means exact figures wobble — the *directions* are what hold.
+are from the eval reports (canonical committed run: `reports/distill_eval_final.md`);
+run-to-run MLX/Claude non-determinism means exact figures wobble — the *directions* are
+what hold.
 
 | Decision | Choice | Rationale | Alternative rejected |
 |---|---|---|---|
