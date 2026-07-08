@@ -127,21 +127,21 @@ SHAP token-level attributions highlight which tokens drove the classifier's deci
 
 ### Adversarial Robustness
 
-The classifier is evaluated against 20 adversarial prompts spanning 8 attack categories. Run `uv run pytest tests/integration/test_adversarial.py` after training to reproduce.
+The classifier is evaluated against the same 20 out-of-distribution prompts as above, spanning 9 attack categories. The table contrasts the **pre-hoc expectation** — what a token-level classifier should and shouldn't catch on paper — with the **measured outcome**. Run `uv run pytest tests/integration/test_adversarial.py` after training to reproduce.
 
-| Attack type | Examples | Expected detection |
-|---|---|---|
-| Payload splitting | Fragmented instructions across sentence parts | Yes — tokens still present |
-| Persona / roleplay | DAN jailbreak, "pretend you are..." | Yes — matches training distribution |
-| Instruction nesting | Hidden directives in markdown/HTML comments | Yes — instruction tokens visible |
-| Code injection | Malicious instructions in code blocks | Yes — "ignore", "system prompt" tokens present |
-| Case manipulation | aLtErNaTiNg CaSe obfuscation | Yes — subword tokenizer normalises |
-| Semantic obfuscation | Hypothetical framing, indirect exfiltration | Partial — depends on phrasing |
-| Base64 encoding | Encoded payloads with decode instructions | No — opaque to tokenizer (judge fallback) |
-| Unicode homoglyphs | Cyrillic/Coptic lookalike substitutions | No — tokenizer sees different tokens (judge fallback) |
-| Multilingual | French, Japanese, Spanish, Russian injections | No — English-centric training data (judge fallback) |
+| Attack type | Examples | Pre-hoc expectation | Hard-blocked |
+|---|---|---|---|
+| Payload splitting | Fragmented instructions across sentence parts | Yes — tokens still present | 2/2 |
+| Persona / roleplay | DAN jailbreak, "pretend you are..." | Yes — matches training distribution | 1/2 (1 GRAY → judge) |
+| Instruction nesting | Hidden directives in markdown/HTML comments | Yes — instruction tokens visible | 2/2 |
+| Code injection | Malicious instructions in code blocks | Yes — "ignore", "system prompt" tokens present | 2/2 |
+| Case manipulation | aLtErNaTiNg CaSe obfuscation | Yes — subword tokenizer normalises | 1/1 |
+| Semantic obfuscation | Hypothetical framing, indirect exfiltration | Partial — depends on phrasing | 3/3 |
+| Base64 encoding | Encoded payloads with decode instructions | No — payload opaque to tokenizer | 2/2 |
+| Unicode homoglyphs | Cyrillic/Coptic lookalike substitutions | No — tokenizer sees different tokens | 2/2 |
+| Multilingual | French, Japanese, Spanish, Russian injections | No — assumed English-centric training data | 4/4 |
 
-**Known limitations:** The text classifier cannot see through encoding barriers (Base64, Unicode substitution) or languages absent from training data. These are architectural limitations of any token-level classifier. The hybrid design handles this by routing uncertain classifications (GRAY zone) to the LLM judge, which can decode Base64, read Unicode, and understand multilingual prompts.
+**The three "No" expectations were wrong, instructively.** The classifier cannot decode a Base64 payload or read homoglyph-substituted text — that part of the reasoning holds — but it doesn't need to: the *scaffolding* around the payload ("decode and follow these instructions...") and the anomalous token sequences of encoded blobs and lookalike scripts are themselves strong distributional evidence of hostility. The multilingual premise was simply false: the training corpus (`deepset/prompt-injections`) already contains non-English injections. Two honest caveats: an attacker who strips the scaffolding (e.g. bare encoded text with no decode instruction) may still slip past the tokenizer, and fine-grained class labels degrade badly under obfuscation (65% exact-class accuracy, above). The GRAY→judge route remains the safety net for both cases — the judge *can* decode Base64, read Unicode, and understand multilingual prompts.
 
 ## Why This Design
 
