@@ -186,7 +186,9 @@ flowchart LR
 the escalation rate, stated head-on.
 
 **Key Numbers** (distilled judge, test split N=90 = 64 BLOCK / 26 PASS; agreement with the
-Claude teacher, with the always-BLOCK failure mode visible in *Benign-PASS*):
+Claude teacher, with the always-BLOCK failure mode visible in *Benign-PASS*). Committed
+evidence: [`reports/distill_eval_final.md`](reports/distill_eval_final.md) — the 2026-07-05
+run these numbers are drawn from, with 95% Wilson CIs and per-provenance breakdowns:
 
 | Judge | Decision-match | BLOCK recall | Benign-PASS | Schema-valid | Latency p50 | Cost/call |
 |---|---|---|---|---|---|---|

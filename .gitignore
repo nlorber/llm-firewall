@@ -24,8 +24,11 @@ data/processed/*
 !data/processed/.gitkeep
 data/distill/*
 !data/distill/.gitkeep
-# Generated distillation eval reports (regenerated after training; final numbers go in docs)
+# Generated distillation eval reports: dated runs are regenerated freely and stay local;
+# the canonical evidence snapshot backing the README table is committed.
 reports/distill_eval_*
+!reports/distill_eval_final.md
+!reports/distill_eval_final.json
 # LoRA training outputs (checkpoint churn). The deployed adapter is a 250 MB+ binary, so it
 # is not committed — reproduce it via the README's distill steps (local/tiered fail fast without it).
 adapters/
