@@ -61,7 +61,7 @@ wandb/
 .DS_Store
 Thumbs.db
 
-# Local dev config for Claude Code
+# Local dev config
 AGENTS.md
 
 # Internal planning docs
