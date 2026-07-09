@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-firewall"
-version = "1.1.1"
+version = "1.2.0"
 description = "Agentic LLM firewall: fine-tuned DeBERTa classifier + LangGraph orchestration for prompt threat detection"
 readme = "README.md"
 license = { file = "LICENSE" }
