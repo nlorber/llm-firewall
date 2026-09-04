@@ -406,8 +406,7 @@ Key metrics:
 
 ```bash
 make docker-build
-docker compose up api               # CPU
-docker compose --profile gpu up     # GPU (requires NVIDIA Container Toolkit)
+docker compose up api
 ```
 
 ## Dev
