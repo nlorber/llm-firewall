@@ -5,7 +5,7 @@ import json
 from typing import TYPE_CHECKING
 
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
 if TYPE_CHECKING:
@@ -41,9 +41,7 @@ class FirewallDataset(Dataset[dict[str, torch.Tensor]]):
         self._input_ids = encoding["input_ids"]
         self._attention_mask = encoding["attention_mask"]
         self._token_type_ids = encoding.get("token_type_ids")
-        self._labels = (
-            torch.tensor(labels, dtype=torch.long) if labels is not None else None
-        )
+        self._labels = torch.tensor(labels, dtype=torch.long) if labels is not None else None
 
     def __len__(self) -> int:
         return int(self._input_ids.shape[0])
@@ -72,25 +70,3 @@ def _load_jsonl(path: Path) -> tuple[list[str], list[int]]:
             texts.append(r["text"])
             labels.append(LABEL2ID[raw_label])
     return texts, labels
-
-
-def create_dataloaders(
-    train_path: Path,
-    val_path: Path,
-    test_path: Path,
-    tokenizer_name: str,
-    batch_size: int,
-    max_length: int = DEFAULT_MAX_LENGTH,
-) -> tuple[DataLoader[dict[str, torch.Tensor]], DataLoader[dict[str, torch.Tensor]], DataLoader[dict[str, torch.Tensor]]]:
-    """Build DataLoaders from processed JSONL splits."""
-
-    def _make(path: Path, shuffle: bool) -> DataLoader[dict[str, torch.Tensor]]:
-        texts, labels = _load_jsonl(path)
-        ds = FirewallDataset(texts, labels, tokenizer_name, max_length)
-        return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=0)
-
-    return (
-        _make(train_path, shuffle=True),
-        _make(val_path, shuffle=False),
-        _make(test_path, shuffle=False),
-    )

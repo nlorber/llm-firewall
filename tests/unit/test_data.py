@@ -1,13 +1,10 @@
 # tests/test_data.py
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
-import torch
 
 from data.prepare import LABEL_NAMES, deduplicate, harmonise_labels, stratified_split
-from firewall.classifier.dataset import LABEL2ID, _load_jsonl, create_dataloaders
+from firewall.classifier.dataset import LABEL2ID, _load_jsonl
 
 
 class TestHarmoniseLabels:
@@ -62,23 +59,28 @@ class TestDeduplicate:
 
 class TestStratifiedSplit:
     def test_split_ratios_are_approximately_correct(self) -> None:
-        records = [{"text": f"t{i}", "label": lbl}
-                   for i in range(20) for lbl in ["benign", "injection"]]
+        records = [
+            {"text": f"t{i}", "label": lbl} for i in range(20) for lbl in ["benign", "injection"]
+        ]
         train, val, test_split = stratified_split(records, val_ratio=0.15, test_ratio=0.15)
         total = len(train) + len(val) + len(test_split)
         assert total == len(records)
         assert abs(len(val) / total - 0.15) < 0.05
 
     def test_all_classes_present_in_train(self) -> None:
-        records = [{"text": f"t{i}", "label": lbl}
-                   for i in range(10) for lbl in ["benign", "injection", "jailbreak"]]
+        records = [
+            {"text": f"t{i}", "label": lbl}
+            for i in range(10)
+            for lbl in ["benign", "injection", "jailbreak"]
+        ]
         train, _, _ = stratified_split(records)
         labels_in_train = {r["label"] for r in train}
         assert labels_in_train == {"benign", "injection", "jailbreak"}
 
     def test_seed_produces_deterministic_splits(self) -> None:
-        records = [{"text": f"t{i}", "label": lbl}
-                   for i in range(50) for lbl in ["benign", "injection"]]
+        records = [
+            {"text": f"t{i}", "label": lbl} for i in range(50) for lbl in ["benign", "injection"]
+        ]
         split_a = stratified_split(records, seed=42)
         split_b = stratified_split(records, seed=42)
         assert [r["text"] for r in split_a[0]] == [r["text"] for r in split_b[0]]
@@ -101,30 +103,3 @@ class TestLoadJsonl:
         texts, labels = _load_jsonl(jsonl)
         assert texts == []
         assert labels == []
-
-
-class TestCreateDataloaders:
-    def test_returns_three_dataloaders(self, tmp_path) -> None:
-        for name in ("train.jsonl", "val.jsonl", "test.jsonl"):
-            (tmp_path / name).write_text('{"text": "hello", "label": "benign"}\n')
-
-        with patch("firewall.classifier.dataset.AutoTokenizer") as mock_tok_cls:
-            mock_tok = MagicMock()
-            mock_tok.return_value = {
-                "input_ids": torch.zeros(1, 16, dtype=torch.long),
-                "attention_mask": torch.ones(1, 16, dtype=torch.long),
-            }
-            mock_tok_cls.from_pretrained.return_value = mock_tok
-
-            train_dl, val_dl, test_dl = create_dataloaders(
-                train_path=tmp_path / "train.jsonl",
-                val_path=tmp_path / "val.jsonl",
-                test_path=tmp_path / "test.jsonl",
-                tokenizer_name="dummy/tokenizer",
-                batch_size=1,
-                max_length=16,
-            )
-
-        assert len(list(train_dl)) == 1
-        assert len(list(val_dl)) == 1
-        assert len(list(test_dl)) == 1
