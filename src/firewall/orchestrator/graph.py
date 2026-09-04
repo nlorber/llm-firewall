@@ -44,23 +44,9 @@ def build_graph(
 
     graph.set_entry_point("classify_node")
 
-    graph.add_conditional_edges(
-        "classify_node",
-        route_after_classify,
-        {
-            "execute_node": "execute_node",
-            "judge_node": "judge_node",
-            "log_node": "log_node",
-        },
-    )
-    graph.add_conditional_edges(
-        "judge_node",
-        route_after_judge,
-        {
-            "execute_node": "execute_node",
-            "log_node": "log_node",
-        },
-    )
+    # No path maps: both routers return the target node name directly.
+    graph.add_conditional_edges("classify_node", route_after_classify)
+    graph.add_conditional_edges("judge_node", route_after_judge)
     graph.add_edge("execute_node", END)
     graph.add_edge("log_node", END)
 
