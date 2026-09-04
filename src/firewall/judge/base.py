@@ -24,7 +24,7 @@ class JudgeVerdict:
     confidence: float
 
 
-@runtime_checkable
+@runtime_checkable  # backend conformance is asserted with isinstance in the unit tests
 class Judge(Protocol):
     """Structural interface every judge backend satisfies.
 

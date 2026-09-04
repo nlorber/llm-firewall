@@ -93,7 +93,13 @@ class LocalJudge:
 
     def _load_kwargs(self) -> dict[str, Any]:
         """Kwargs for ``mlx_lm.load`` — forward ``adapter_path`` only when set so the base
-        model still loads exactly as before (backward-compatible)."""
+        model still loads exactly as before (backward-compatible).
+
+        Kept as a method rather than inlined into ``_ensure_loaded``: that method is the
+        MLX seam (``# pragma: no cover``), so this is the only place the adapter-forwarding
+        logic can be unit-tested without MLX installed. Loading the base model instead of
+        the fine-tuned adapter is a silent quality collapse, so it stays covered.
+        """
         kwargs: dict[str, Any] = {}
         if self._adapter_path is not None:
             kwargs["adapter_path"] = self._adapter_path

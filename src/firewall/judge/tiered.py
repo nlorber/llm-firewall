@@ -51,7 +51,7 @@ class LocalResult:
     valid: bool
 
 
-@runtime_checkable
+@runtime_checkable  # conformance is asserted with isinstance in the unit tests
 class TieringLocalJudge(Protocol):
     """A local judge that also reports an uncertainty signal for escalation."""
 
