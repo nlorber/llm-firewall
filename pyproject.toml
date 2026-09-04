@@ -47,7 +47,7 @@ dev = [
     "ruff>=0.4,<1",
     "mypy>=1.10,<2",
     "types-PyYAML>=6.0,<7",
-    "pre-commit>=3.7,<4",
+    "pre-commit>=4.6.0,<5",
     "jupyter>=1.0,<2",
     "ipykernel>=6.29,<7",
     # Notebook / offline-script only — kept out of the runtime image (`uv sync --no-dev`).
