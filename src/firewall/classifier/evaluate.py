@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -14,13 +15,13 @@ from sklearn.metrics import (
     f1_score,
 )
 
-from firewall.classifier.dataset import LABEL2ID
+from firewall.classifier.dataset import LABEL2ID, _load_jsonl
 from firewall.classifier.model import load_classifier
-from firewall.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_EVAL_BATCH_SIZE = 32
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 
 def evaluate(
@@ -32,17 +33,7 @@ def evaluate(
     """Run inference on the test split and return full evaluation metrics."""
     clf = load_classifier(model_path)
 
-    texts, y_true = [], []
-    test_file = Path(test_path)
-    with test_file.open() as f:
-        for lineno, line in enumerate(f, 1):
-            r = json.loads(line)
-            raw_label = r["label"]
-            if raw_label not in LABEL2ID:
-                msg = f"Unknown label {raw_label!r} at line {lineno} in {test_file}"
-                raise ValueError(msg)
-            texts.append(r["text"])
-            y_true.append(LABEL2ID[raw_label])
+    texts, y_true = _load_jsonl(Path(test_path))
     all_pred_labels: list[str] = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
@@ -184,7 +175,7 @@ def _write_metrics(results: dict[str, Any], path: Path) -> None:
 
 
 def main() -> None:
-    setup_logging()
+    logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT, stream=sys.stdout, force=True)
     parser = argparse.ArgumentParser(description="Evaluate the fine-tuned classifier")
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument(
@@ -211,7 +202,7 @@ def main() -> None:
 
 
 def robustness_main() -> None:
-    setup_logging()
+    logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT, stream=sys.stdout, force=True)
     parser = argparse.ArgumentParser(
         description="Evaluate OOD detection recall on a held-out attack set"
     )
