@@ -18,12 +18,8 @@ dependencies = [
     # Deep learning + HuggingFace ecosystem
     "torch>=2.0,<3",
     "transformers>=4.40,<5",
-    "datasets>=2.18,<3",
-    "tokenizers>=0.19,<1",
-    # Classical ML + explainability
+    # Classical ML
     "scikit-learn>=1.4,<2",
-    "shap>=0.45,<1",
-    "matplotlib>=3.8,<4",
     # Agentic orchestration
     "langgraph>=0.2,<1",
     # LLM API (judge)
@@ -54,6 +50,11 @@ dev = [
     "pre-commit>=3.7,<4",
     "jupyter>=1.0,<2",
     "ipykernel>=6.29,<7",
+    # Notebook / offline-script only — kept out of the runtime image (`uv sync --no-dev`).
+    # shap + matplotlib: classifier/explain.py and the notebooks. datasets: data/download.py.
+    "datasets>=2.18,<3",
+    "shap>=0.45,<1",
+    "matplotlib>=3.8,<4",
 ]
 distill = [
     # Apple-Silicon-only: MLX fine-tuning + local inference. Darwin-marked so Linux

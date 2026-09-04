@@ -2099,10 +2099,8 @@ source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
     { name = "anthropic" },
-    { name = "datasets" },
     { name = "fastapi" },
     { name = "langgraph" },
-    { name = "matplotlib" },
     { name = "prometheus-client" },
     { name = "protobuf" },
     { name = "pydantic" },
@@ -2110,8 +2108,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "scikit-learn" },
     { name = "sentencepiece" },
-    { name = "shap" },
-    { name = "tokenizers" },
     { name = "torch" },
     { name = "transformers" },
     { name = "uvicorn", extra = ["standard"] },
@@ -2119,13 +2115,16 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "datasets" },
     { name = "ipykernel" },
     { name = "jupyter" },
+    { name = "matplotlib" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "shap" },
     { name = "types-pyyaml" },
 ]
 distill = [
@@ -2137,12 +2136,12 @@ distill = [
 requires-dist = [
     { name = "accelerate", specifier = ">=0.26,<2" },
     { name = "anthropic", specifier = ">=0.28,<1" },
-    { name = "datasets", specifier = ">=2.18,<3" },
+    { name = "datasets", marker = "extra == 'dev'", specifier = ">=2.18,<3" },
     { name = "fastapi", specifier = ">=0.111,<1" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29,<7" },
     { name = "jupyter", marker = "extra == 'dev'", specifier = ">=1.0,<2" },
     { name = "langgraph", specifier = ">=0.2,<1" },
-    { name = "matplotlib", specifier = ">=3.8,<4" },
+    { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.8,<4" },
     { name = "mlx", marker = "sys_platform == 'darwin' and extra == 'distill'", specifier = ">=0.18" },
     { name = "mlx-lm", marker = "sys_platform == 'darwin' and extra == 'distill'", specifier = ">=0.20" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10,<2" },
@@ -2157,8 +2156,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4,<1" },
     { name = "scikit-learn", specifier = ">=1.4,<2" },
     { name = "sentencepiece", specifier = ">=0.2,<1" },
-    { name = "shap", specifier = ">=0.45,<1" },
-    { name = "tokenizers", specifier = ">=0.19,<1" },
+    { name = "shap", marker = "extra == 'dev'", specifier = ">=0.45,<1" },
     { name = "torch", specifier = ">=2.0,<3" },
     { name = "transformers", specifier = ">=4.40,<5" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0,<7" },
