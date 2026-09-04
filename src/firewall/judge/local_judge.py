@@ -8,6 +8,7 @@ Apple-Silicon path is exercised only by the integration smoke.
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 from typing import TYPE_CHECKING, Any, Literal
@@ -17,6 +18,8 @@ from firewall.judge.tiered import LocalResult
 
 if TYPE_CHECKING:
     from firewall.judge.base import ChatMessage
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_TOKENS = 256
 _THINK_OPEN = "<think>"
@@ -76,16 +79,12 @@ class LocalJudge:
         model_path: str,
         max_tokens: int = _DEFAULT_MAX_TOKENS,
         enable_thinking: bool = False,
-        on_failure: Literal["raise", "block"] = "raise",
-        resample_temp: float | None = None,
         adapter_path: str | None = None,
         signal_mode: Literal["confidence", "logprob_margin", "entropy"] = "confidence",
     ) -> None:
         self._model_path = model_path
         self._max_tokens = max_tokens
         self._enable_thinking = enable_thinking
-        self._on_failure = on_failure
-        self._resample_temp = resample_temp
         self._adapter_path = adapter_path  # base + LoRA adapter (fine-tuned); None = base only
         self._signal_mode = signal_mode  # tiering uncertainty signal (see judge_for_tiering)
         self._model: Any = None
@@ -111,10 +110,28 @@ class LocalJudge:
         classification_label: str,
         scores: dict[str, float],
     ) -> JudgeVerdict:
-        """Run the local model and parse a PASS/BLOCK verdict (see _parse_or_recover)."""
+        """Run the local model and parse a PASS/BLOCK verdict, failing closed.
+
+        Both failure modes — schema-invalid output and thinking-mode leakage — resolve to
+        BLOCK rather than an exception: a gray-zone prompt is attacker-controlled, and one
+        that baits the model into a ``<think>`` block must not escape the policy as a 500.
+        The warning keeps a misconfigured (thinking) model visible instead of silently
+        blocking everything.
+        """
         messages, _boundary = build_judge_messages(prompt, classification_label, scores)
         raw = self._generate(messages, temp=0.0)
-        return self._parse_or_recover(raw, messages)
+        try:
+            return parse_verdict(strip_and_check_thinking(raw))
+        except (ValueError, ThinkingModeError) as exc:
+            logger.warning(
+                "local judge produced no valid verdict (%s); failing closed to BLOCK",
+                type(exc).__name__,
+            )
+            return JudgeVerdict(
+                decision="BLOCK",
+                reasoning="local judge produced no valid verdict; failing closed",
+                confidence=1.0,
+            )
 
     def generate_raw(
         self,
@@ -157,33 +174,6 @@ class LocalJudge:
             return LocalResult(verdict=None, signal=1.0, valid=False)
         signal = (1.0 - verdict.confidence) if logprob_signal is None else logprob_signal
         return LocalResult(verdict=verdict, signal=signal, valid=True)
-
-    def _parse_or_recover(self, raw: str, messages: list[ChatMessage]) -> JudgeVerdict:
-        """Parse the greedy output; on failure optionally resample once, then apply the
-        failure policy. Covers both schema errors and thinking-mode leakage: with
-        ``on_failure="block"`` either mode fails closed to BLOCK, so an attacker-baited
-        ``<think>`` block cannot escape the policy as an uncaught exception. A temp-0 retry
-        would reproduce identical invalid output, so recovery (when enabled) resamples at
-        ``resample_temp`` > 0.
-        """
-        try:
-            return parse_verdict(strip_and_check_thinking(raw))
-        except (ValueError, ThinkingModeError) as first_exc:
-            if self._resample_temp is not None:
-                retry_raw = self._generate(messages, temp=self._resample_temp)
-                try:
-                    return parse_verdict(strip_and_check_thinking(retry_raw))
-                except (ValueError, ThinkingModeError):
-                    pass
-            if self._on_failure == "block":
-                return JudgeVerdict(
-                    decision="BLOCK",
-                    reasoning="local judge produced no valid verdict; failing closed",
-                    confidence=1.0,
-                )
-            if isinstance(first_exc, ThinkingModeError):
-                raise  # surface reasoning leakage distinctly when not failing closed
-            raise ValueError(f"local judge produced invalid verdict: {raw!r}") from first_exc
 
     # The methods below are the only place MLX is touched; they are exercised by the
     # integration smoke (skipped on CI), so they are excluded from unit coverage.

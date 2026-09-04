@@ -164,9 +164,7 @@ def make_judge(
         if not local_model:
             raise ValueError(f"judge backend {backend!r} requires local_model")
         if backend == "local":
-            return LocalJudge(
-                local_model, adapter_path=adapter_path, max_tokens=max_tokens, on_failure="block"
-            )
+            return LocalJudge(local_model, adapter_path=adapter_path, max_tokens=max_tokens)
         # Validate here rather than let a typo'd config value silently fall through to the
         # margin path (any non-"entropy" value hits it) and misreport the escalation signal.
         if signal_mode not in _VALID_SIGNAL_MODES:

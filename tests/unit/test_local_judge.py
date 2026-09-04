@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import TYPE_CHECKING
 
@@ -160,26 +161,19 @@ class TestDecisionUncertainty:
 
 
 class TestLocalJudgeNonThinking:
-    def test_rejects_non_empty_think_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        judge = LocalJudge("fake-model")
-        leaked = (
-            '<think>let me reason</think>\n{"decision":"PASS","reasoning":"x","confidence":0.7}'
-        )
-        monkeypatch.setattr(judge, "_generate", _fixed(leaked))
-        with pytest.raises(ThinkingModeError, match="think"):
-            judge.judge("hello", "benign", {"benign": 0.45})
-
-    def test_non_empty_think_block_fails_closed_when_on_failure_block(
-        self, monkeypatch: pytest.MonkeyPatch
+    def test_non_empty_think_block_fails_closed_and_warns(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        # A gray-zone prompt could bait the model into echoing <think>: ThinkingModeError
-        # must not escape the on_failure="block" policy (attacker-influenceable 500).
-        judge = LocalJudge("fake-model", on_failure="block")
+        # A gray-zone prompt could bait the model into echoing <think>: the leak must not
+        # escape as an attacker-influenceable 500, and must stay visible in the logs.
+        judge = LocalJudge("fake-model")
         leaked = '<think>reason</think>{"decision":"PASS","reasoning":"x","confidence":0.7}'
         monkeypatch.setattr(judge, "_generate", _fixed(leaked))
-        verdict = judge.judge("hello", "benign", {"benign": 0.45})
+        with caplog.at_level(logging.WARNING, logger="firewall.judge.local_judge"):
+            verdict = judge.judge("hello", "benign", {"benign": 0.45})
         assert verdict.decision == "BLOCK"
         assert verdict.confidence == pytest.approx(1.0)
+        assert "ThinkingModeError" in caplog.text
 
     def test_tolerates_empty_think_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Qwen3-4B-Instruct fine-tunes reproduce the template's empty <think></think> in the
@@ -199,39 +193,9 @@ class TestLocalJudgeNonThinking:
 
 
 class TestLocalJudgeFailureModes:
-    def test_invalid_raises_when_on_failure_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        judge = LocalJudge("fake-model", on_failure="raise")
-        monkeypatch.setattr(judge, "_generate", _fixed("NOT JSON"))
-        with pytest.raises(ValueError, match="invalid verdict"):
-            judge.judge("x", "injection", {"injection": 0.5})
-
-    def test_invalid_blocks_when_on_failure_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        judge = LocalJudge("fake-model", on_failure="block")
+    def test_invalid_output_fails_closed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        judge = LocalJudge("fake-model")
         monkeypatch.setattr(judge, "_generate", _fixed("NOT JSON"))
         verdict = judge.judge("x", "injection", {"injection": 0.5})
         assert verdict.decision == "BLOCK"
         assert verdict.confidence == pytest.approx(1.0)
-
-    def test_resample_recovers_then_parses(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        judge = LocalJudge("fake-model", on_failure="block", resample_temp=0.7)
-        calls: dict[str, int] = {"n": 0}
-        good = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})
-
-        def _gen(messages: list[ChatMessage], temp: float) -> str:
-            calls["n"] += 1
-            return "NOT JSON" if calls["n"] == 1 else good
-
-        monkeypatch.setattr(judge, "_generate", _gen)
-        verdict = judge.judge("hi", "benign", {"benign": 0.45})
-        assert verdict.decision == "PASS"
-        assert calls["n"] == 2  # greedy attempt failed, one resample succeeded
-
-    def test_resample_failure_falls_through_to_policy(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Both the greedy attempt and the resample produce invalid JSON → the failure
-        # policy applies (here: fail-closed to BLOCK).
-        judge = LocalJudge("fake-model", on_failure="block", resample_temp=0.7)
-        monkeypatch.setattr(judge, "_generate", _fixed("STILL NOT JSON"))
-        verdict = judge.judge("x", "injection", {"injection": 0.5})
-        assert verdict.decision == "BLOCK"

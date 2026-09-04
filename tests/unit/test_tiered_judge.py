@@ -112,9 +112,7 @@ class TestFactory:
     def test_local_backend_fails_closed(self) -> None:
         with patch("firewall.judge.local_judge.LocalJudge") as local:
             make_judge("local", local_model="base", adapter_path="adapters/a", max_tokens=128)
-        local.assert_called_once_with(
-            "base", adapter_path="adapters/a", max_tokens=128, on_failure="block"
-        )
+        local.assert_called_once_with("base", adapter_path="adapters/a", max_tokens=128)
 
     def test_tiered_backend_wraps_local_and_claude(self) -> None:
         with (
