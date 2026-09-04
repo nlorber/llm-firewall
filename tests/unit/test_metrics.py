@@ -46,7 +46,6 @@ def _make_state(prompt: str = "hello") -> FirewallState:
         judge_result=None,
         final_decision=None,
         explanation=None,
-        logs=[],
     )
 
 

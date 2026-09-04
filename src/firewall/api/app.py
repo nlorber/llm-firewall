@@ -126,7 +126,6 @@ def create_app() -> FastAPI:
             "judge_result": None,
             "final_decision": None,
             "explanation": None,
-            "logs": [],
         }
         try:
             result = await asyncio.to_thread(app.state.graph.invoke, initial_state)

@@ -6,7 +6,7 @@ the graph. Every node receives the full state and returns a partial update dict.
 
 from __future__ import annotations
 
-from typing import Any, NotRequired, TypedDict
+from typing import NotRequired, TypedDict
 
 
 class ClassificationResult(TypedDict):
@@ -44,4 +44,3 @@ class FirewallState(TypedDict):
     judge_result: JudgeResult | None
     final_decision: str | None  # "PASS" | "BLOCK"
     explanation: str | None  # human-readable rationale included in the API response
-    logs: list[dict[str, Any]]  # structured audit log of block events

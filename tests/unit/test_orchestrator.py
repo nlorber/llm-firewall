@@ -1,6 +1,7 @@
 # tests/test_orchestrator.py
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -18,7 +19,6 @@ def _make_state(prompt: str = "hello") -> FirewallState:
         judge_result=None,
         final_decision=None,
         explanation=None,
-        logs=[],
     )
 
 
@@ -278,12 +278,18 @@ class TestLogNode:
         update = nodes_mod.log_node(state)
         assert update["final_decision"] == "BLOCK"
 
-    def test_log_node_appends_to_logs(self) -> None:
-        state = _make_state("bad prompt")
-        update = nodes_mod.log_node(state)
-        assert len(update["logs"]) == 1
-        assert "prompt" in update["logs"][0]
-        assert "timestamp" in update["logs"][0]
+    def test_log_node_emits_audit_line_without_the_prompt(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        state = {**_make_state("bad prompt"), "zone": "BLOCK"}
+        with caplog.at_level(logging.INFO, logger="firewall.orchestrator.nodes"):
+            nodes_mod.log_node(state)  # type: ignore[arg-type]
+        assert len(caplog.records) == 1
+        line = caplog.records[0].getMessage()
+        assert "BLOCK zone=BLOCK" in line
+        assert "prompt_len=10" in line
+        # The prompt is attacker-controlled and (tiered backend) must not leave the box.
+        assert "bad prompt" not in line
 
     def test_log_node_with_judge_result_uses_judge_reasoning(self) -> None:
         state = {
@@ -323,7 +329,6 @@ class TestGraphIntegration:
                 "judge_result": None,
                 "final_decision": None,
                 "explanation": None,
-                "logs": [],
             }
         )
 
@@ -346,14 +351,12 @@ class TestGraphIntegration:
                 "judge_result": None,
                 "final_decision": None,
                 "explanation": None,
-                "logs": [],
             }
         )
 
         assert state["final_decision"] == "BLOCK"
         assert state["zone"] == "BLOCK"
         mock_judge.judge.assert_not_called()
-        assert len(state["logs"]) == 1
 
     def test_gray_zone_invokes_judge(self) -> None:
         from firewall.orchestrator.graph import build_graph
@@ -373,7 +376,6 @@ class TestGraphIntegration:
                 "judge_result": None,
                 "final_decision": None,
                 "explanation": None,
-                "logs": [],
             }
         )
 

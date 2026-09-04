@@ -1,8 +1,8 @@
 # src/firewall/orchestrator/nodes.py
 from __future__ import annotations
 
+import logging
 import time
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -21,6 +21,8 @@ from firewall.orchestrator.metrics import (
 from firewall.orchestrator.state import (
     FirewallState,  # noqa: TCH001 — LangGraph introspects annotations
 )
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CLEAN_THRESHOLD: float = 0.3
 DEFAULT_BLOCK_THRESHOLD: float = 0.8
@@ -151,7 +153,12 @@ def execute_node(state: FirewallState) -> dict[str, Any]:
 
 
 def log_node(state: FirewallState) -> dict[str, Any]:
-    """Append a structured block event and finalise a BLOCK decision."""
+    """Record the block event and finalise a BLOCK decision.
+
+    The audit line carries decision metadata only — never the prompt text, which is
+    attacker-controlled and (for the local/tiered backends) the very thing that never leaves
+    the machine. Length is enough to correlate with an upstream access log.
+    """
     clf: dict[str, Any] = dict(state.get("classification") or {})
     judge_result = state.get("judge_result")
 
@@ -162,24 +169,16 @@ def log_node(state: FirewallState) -> dict[str, Any]:
         score = clf.get("threat_score", 0.0)
         explanation = f"Prompt classified as '{label}' (threat_score {score:.2f}) — above block threshold. BLOCK."
 
-    log_entry: dict[str, Any] = {
-        "timestamp": datetime.now(UTC).isoformat(),
-        "prompt": state["prompt"],
-        "zone": state.get("zone"),
-        "label": clf.get("label"),
-        "top_score": clf.get("top_score"),
-        "threat_score": clf.get("threat_score"),
-        "judge_result": judge_result,
-        "explanation": explanation,
-    }
-
+    logger.info(
+        "BLOCK zone=%s label=%s threat=%.3f tier=%s prompt_len=%d",
+        state.get("zone"),
+        clf.get("label"),
+        clf.get("threat_score", 0.0),
+        judge_result.get("tier") if judge_result else None,
+        len(state["prompt"]),
+    )
     requests_total.labels(zone=state.get("zone", "unknown"), final_decision="BLOCK").inc()
-    existing_logs: list[dict[str, Any]] = list(state.get("logs") or [])
-    return {
-        "final_decision": "BLOCK",
-        "explanation": explanation,
-        "logs": existing_logs + [log_entry],
-    }
+    return {"final_decision": "BLOCK", "explanation": explanation}
 
 
 def route_after_classify(state: FirewallState) -> str:

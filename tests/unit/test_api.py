@@ -75,7 +75,6 @@ def _graph_result(decision: str, zone: str, label: str, score: float, judge: boo
         else None,
         "final_decision": decision,
         "explanation": "test explanation",
-        "logs": [],
     }
 
 
