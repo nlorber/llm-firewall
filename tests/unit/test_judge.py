@@ -98,11 +98,14 @@ class TestLLMJudge:
         assert result.decision == "PASS"
         assert result.confidence == pytest.approx(0.85)
 
-    def test_confidence_outside_valid_range_is_passed_through(self, judge: LLMJudge) -> None:
+    def test_confidence_outside_valid_range_is_retried_then_rejected(
+        self, judge: LLMJudge
+    ) -> None:
         payload = json.dumps({"decision": "BLOCK", "reasoning": "test", "confidence": 1.5})
         judge._client.messages.create.return_value = _mock_anthropic_response(payload)
-        result = judge.judge("test", "injection", {"injection": 0.5})
-        assert result.confidence == pytest.approx(1.5)
+        with pytest.raises(ValueError, match="failed to obtain judge verdict"):
+            judge.judge("test", "injection", {"injection": 0.5})
+        assert judge._client.messages.create.call_count == 3
 
     def test_api_error_triggers_retry(self, judge: LLMJudge) -> None:
         good_payload = json.dumps({"decision": "PASS", "reasoning": "ok", "confidence": 0.8})

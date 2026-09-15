@@ -32,9 +32,11 @@ class TestParseVerdict:
         with pytest.raises(json.JSONDecodeError):
             parse_verdict("NOT_JSON")
 
-    def test_confidence_outside_range_passed_through(self) -> None:
-        raw = json.dumps({"decision": "BLOCK", "reasoning": "t", "confidence": 1.5})
-        assert parse_verdict(raw).confidence == pytest.approx(1.5)
+    @pytest.mark.parametrize("confidence", [1.5, -0.1, float("nan")])
+    def test_rejects_confidence_outside_unit_interval(self, confidence: float) -> None:
+        raw = json.dumps({"decision": "BLOCK", "reasoning": "t", "confidence": confidence})
+        with pytest.raises(ValueError, match="confidence outside"):
+            parse_verdict(raw)
 
     @pytest.mark.parametrize(
         "raw",

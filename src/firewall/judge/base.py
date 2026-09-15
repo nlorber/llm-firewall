@@ -57,7 +57,8 @@ def parse_verdict(raw: str) -> JudgeVerdict:
     Raises:
         ValueError: if the text is not valid JSON, is not a JSON object, is missing a
             required field, ``decision`` is not the string PASS/BLOCK, or ``confidence``
-            is not coercible to a float.
+            is not a float in [0, 1] (NaN included — an out-of-range confidence would feed
+            a negative uncertainty into tiering and keep the verdict local).
     """
     fence_match = _CODE_FENCE_RE.match(raw)
     cleaned = fence_match.group(1).strip() if fence_match else raw
@@ -72,6 +73,8 @@ def parse_verdict(raw: str) -> JudgeVerdict:
         raise ValueError(f"malformed judge verdict: {cleaned!r}") from exc
     if not isinstance(decision, str) or decision not in {"PASS", "BLOCK"}:
         raise ValueError(f"unexpected judge decision: {decision!r}")
+    if not 0.0 <= confidence <= 1.0:
+        raise ValueError(f"judge confidence outside [0, 1]: {confidence!r}")
     return JudgeVerdict(decision=decision, reasoning=reasoning, confidence=confidence)
 
 
