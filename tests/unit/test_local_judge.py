@@ -103,6 +103,27 @@ class TestLocalJudgeTiering:
         assert result.verdict is None
         assert result.signal == 1.0
 
+    def test_logprob_signal_is_passed_through(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        judge = LocalJudge("fake-model", signal_mode="logprob_margin")
+        payload = json.dumps({"decision": "BLOCK", "reasoning": "x", "confidence": 0.9})
+        monkeypatch.setattr(judge, "_generate_with_signal", lambda messages: (payload, 0.2))
+        result = judge.judge_for_tiering("x", "injection", {"injection": 0.5})
+        assert result.valid
+        assert result.signal == pytest.approx(0.2)
+
+    def test_missing_decision_token_is_invalid_not_uncertain(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The verdict parses, but the signal reader never located the decision token (here
+        # the key lacks the expected space). With no uncertainty reading, the composite must
+        # escalate it as schema-invalid, not report it as genuine model uncertainty.
+        judge = LocalJudge("fake-model", signal_mode="logprob_margin")
+        payload = '{"decision":"PASS","reasoning":"x","confidence":0.9}'
+        monkeypatch.setattr(judge, "_generate_with_signal", lambda messages: (payload, None))
+        result = judge.judge_for_tiering("x", "injection", {"injection": 0.5})
+        assert not result.valid
+        assert result.verdict is None
+
     def test_satisfies_tiering_local_judge_protocol(self) -> None:
         from firewall.judge.tiered import TieringLocalJudge
 

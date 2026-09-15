@@ -7,7 +7,7 @@ the local tier is injected as a ``TieringLocalJudge`` and the escalation target 
 ``Judge``, so the whole escalation policy is unit-tested with fakes.
 
 Escalation happens when the local model is uncertain (``signal >= threshold``), emits
-un-parseable output (schema-invalid), or fails (error). The signal convention is
+output that does not parse or yields no signal (schema-invalid), or fails (error). The signal convention is
 higher = more uncertain. Tier + reason are metadata for metrics/logging; the returned
 verdict keeps the plain ``{decision, reasoning, confidence}`` schema.
 """
@@ -37,14 +37,14 @@ class EscalationReason(StrEnum):
 
     NONE = "none"  # kept local
     UNCERTAINTY = "uncertainty"  # signal past threshold (the only "genuine" leakage)
-    SCHEMA_INVALID = "schema_invalid"  # local output did not parse
+    SCHEMA_INVALID = "schema_invalid"  # local output did not parse or yielded no signal
     ERROR = "error"  # local model raised
 
 
 @dataclass
 class LocalResult:
-    """What the local tier returns for tiering: verdict (None if unparseable), an uncertainty
-    signal (higher = more uncertain), and whether the output parsed."""
+    """What the local tier returns for tiering: verdict (None if invalid), an uncertainty
+    signal (higher = more uncertain), and whether the output parsed and yielded a signal."""
 
     verdict: JudgeVerdict | None
     signal: float

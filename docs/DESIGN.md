@@ -271,7 +271,8 @@ firewall pays most for a missed BLOCK, the **Haiku-distilled, high-capacity mode
 `TieredJudge` (a composite implementing the same `Judge` interface, so `nodes.py` is
 unchanged) runs the local model, then escalates on **uncertainty**, **schema-invalid output**,
 or **error** — recording the reason so the eval can decompose the escalation rate (only the
-uncertainty share is genuine privacy leakage).
+uncertainty share is genuine privacy leakage). Output that parses but whose decision token the
+signal reader cannot locate has no uncertainty reading, so it counts as schema-invalid.
 
 The escalation **signal** is the subtle part. The obvious candidate — the model's emitted
 `confidence` — is useless (val AUC 0.481): the student was trained to mimic *Claude's*

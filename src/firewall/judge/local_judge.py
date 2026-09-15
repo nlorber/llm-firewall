@@ -159,10 +159,12 @@ class LocalJudge:
         In ``"confidence"`` mode the signal is ``1 - emitted confidence`` (a structurally weak
         proxy — the student mimics the teacher's confidence, not its own uncertainty). The
         ``logprob_margin`` / ``entropy`` modes instead read the model's *own* uncertainty at the
-        BLOCK/PASS decision token. An unparseable output is maximally uncertain and invalid →
-        the composite escalates.
+        BLOCK/PASS decision token. An unparseable output — or, in a log-prob mode, one whose
+        decision token could not be located — is invalid → the composite escalates it as
+        schema-invalid rather than counting it as genuine uncertainty.
         """
         messages, _boundary = build_judge_messages(prompt, classification_label, scores)
+        invalid = LocalResult(verdict=None, signal=1.0, valid=False)
         logprob_signal: float | None = None
         if self._signal_mode == "confidence":
             raw = self._generate(messages, temp=0.0)
@@ -171,9 +173,12 @@ class LocalJudge:
         try:
             verdict = parse_verdict(strip_and_check_thinking(raw))
         except (ValueError, ThinkingModeError):
-            return LocalResult(verdict=None, signal=1.0, valid=False)
-        signal = (1.0 - verdict.confidence) if logprob_signal is None else logprob_signal
-        return LocalResult(verdict=verdict, signal=signal, valid=True)
+            return invalid
+        if self._signal_mode == "confidence":
+            return LocalResult(verdict=verdict, signal=1.0 - verdict.confidence, valid=True)
+        if logprob_signal is None:
+            return invalid
+        return LocalResult(verdict=verdict, signal=logprob_signal, valid=True)
 
     # The methods below are the only place MLX is touched; they are exercised by the
     # integration smoke (skipped on CI), so they are excluded from unit coverage.
@@ -200,13 +205,14 @@ class LocalJudge:
 
     def _generate_with_signal(  # pragma: no cover
         self, messages: list[ChatMessage]
-    ) -> tuple[str, float]:
+    ) -> tuple[str, float | None]:
         """Greedy-decode and read the model's uncertainty at the BLOCK/PASS decision token.
 
         Streams tokens; at the step that first emits a char past ``"decision": "`` (the JSON
         decision value), the yielded log-probs are the decision distribution — we read the
         BLOCK and PASS first-token log-probs there and map them to an uncertainty in [0, 1].
-        Falls back to maximally uncertain if the model never emits a well-formed decision key.
+        The signal is ``None`` if the model never emits the decision key in that form: an
+        extraction failure, which the caller must not mistake for model uncertainty.
         """
         import mlx.core as mx
         from mlx_lm.generate import generate_step
@@ -226,8 +232,7 @@ class LocalJudge:
         marker = '"decision": "'
 
         tokens: list[int] = []
-        signal = 1.0  # maximally uncertain until a decision token is located
-        found = False
+        signal: float | None = None  # stays None until the decision token is located
         sampler = make_sampler(temp=0.0)
         for token, logprobs in generate_step(
             mx.array(prompt_ids), self._model, max_tokens=self._max_tokens, sampler=sampler
@@ -236,14 +241,13 @@ class LocalJudge:
             if tid == tok.eos_token_id:
                 break  # exclude the end token so decode() yields clean JSON (mirrors generate())
             tokens.append(tid)
-            if not found:
+            if signal is None:
                 text = tok.decode(tokens)
                 pos = text.find(marker)
                 if pos != -1 and len(text) > pos + len(marker):
                     signal = _decision_uncertainty(
                         float(logprobs[block_first]), float(logprobs[pass_first]), mode
                     )
-                    found = True
         return tok.decode(tokens).strip(), signal
 
     def _ensure_loaded(self) -> None:  # pragma: no cover
