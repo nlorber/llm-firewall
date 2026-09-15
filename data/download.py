@@ -73,18 +73,20 @@ def generate_synthetic(
     message = client.messages.create(
         model=model,
         max_tokens=4096,
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Generate {n_examples} short, realistic example prompts that are "
-                f"{descriptions[label]}.\n\n"
-                "Requirements:\n"
-                "- Each is a standalone user message (1-3 sentences)\n"
-                "- Diverse phrasing: don't repeat the same structure\n"
-                "- Look like real user input (not obvious placeholders)\n\n"
-                'Return ONLY a JSON array of strings: ["prompt1", "prompt2", ...]'
-            ),
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Generate {n_examples} short, realistic example prompts that are "
+                    f"{descriptions[label]}.\n\n"
+                    "Requirements:\n"
+                    "- Each is a standalone user message (1-3 sentences)\n"
+                    "- Diverse phrasing: don't repeat the same structure\n"
+                    "- Look like real user input (not obvious placeholders)\n\n"
+                    'Return ONLY a JSON array of strings: ["prompt1", "prompt2", ...]'
+                ),
+            }
+        ],
     )
     raw_text = message.content[0].text.strip()
     # Strip markdown code fences if the model wraps the JSON
@@ -103,9 +105,7 @@ def main() -> None:
     """CLI: python data/download.py [--output-dir data/raw] [--skip-synthetic]"""
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Download raw datasets for llm-firewall training"
-    )
+    parser = argparse.ArgumentParser(description="Download raw datasets for llm-firewall training")
     parser.add_argument("--output-dir", default="data/raw", type=Path)
     parser.add_argument(
         "--skip-synthetic",

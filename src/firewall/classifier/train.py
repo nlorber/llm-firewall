@@ -42,7 +42,9 @@ class WeightedTrainer(Trainer):
         outputs = model(**inputs)
         logits = outputs.logits
         loss = torch.nn.functional.cross_entropy(
-            logits, labels, weight=self._class_weights.to(logits.device),
+            logits,
+            labels,
+            weight=self._class_weights.to(logits.device),
         )
         return (loss, outputs) if return_outputs else loss
 
@@ -52,8 +54,8 @@ def compute_metrics(eval_pred: tuple[np.ndarray, np.ndarray]) -> dict[str, float
     logits, labels = eval_pred
     preds = np.argmax(logits, axis=-1)
     return {
-        "accuracy":    float(accuracy_score(labels, preds)),
-        "f1_macro":    float(f1_score(labels, preds, average="macro", zero_division=0)),
+        "accuracy": float(accuracy_score(labels, preds)),
+        "f1_macro": float(f1_score(labels, preds, average="macro", zero_division=0)),
         "f1_weighted": float(f1_score(labels, preds, average="weighted", zero_division=0)),
     }
 
@@ -80,10 +82,12 @@ def train(config_path: str | Path) -> None:
     tokenizer_name = config["model_name"]
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)  # type: ignore[no-untyped-call]
     train_ds = FirewallDataset(train_texts, train_labels, tokenizer_name, config["max_length"])
-    val_ds   = FirewallDataset(val_texts, val_labels, tokenizer_name, config["max_length"])
+    val_ds = FirewallDataset(val_texts, val_labels, tokenizer_name, config["max_length"])
 
     # Compute inverse-frequency class weights to handle imbalanced data
-    weights = compute_class_weight("balanced", classes=np.arange(config["num_labels"]), y=np.array(train_labels))
+    weights = compute_class_weight(
+        "balanced", classes=np.arange(config["num_labels"]), y=np.array(train_labels)
+    )
     class_weights = torch.tensor(weights, dtype=torch.float32)
 
     training_args = TrainingArguments(
@@ -112,9 +116,9 @@ def train(config_path: str | Path) -> None:
         eval_dataset=val_ds,
         processing_class=tokenizer,
         compute_metrics=compute_metrics,
-        callbacks=[EarlyStoppingCallback(
-            early_stopping_patience=config["early_stopping_patience"]
-        )],
+        callbacks=[
+            EarlyStoppingCallback(early_stopping_patience=config["early_stopping_patience"])
+        ],
     )
 
     trainer.train()

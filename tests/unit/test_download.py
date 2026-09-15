@@ -26,10 +26,7 @@ class TestDownloadPromptInjections:
         assert output_file.exists()
 
     def test_jsonl_has_correct_record_count(self, tmp_path: Path) -> None:
-        mock_dataset = [
-            {"text": f"text {i}", "label": i % 2}
-            for i in range(5)
-        ]
+        mock_dataset = [{"text": f"text {i}", "label": i % 2} for i in range(5)]
         with patch("data.download.load_dataset", return_value=mock_dataset):
             download_prompt_injections(tmp_path)
 
@@ -75,11 +72,13 @@ class TestDownloadJailbreakBench:
         assert record["label"] == "jailbreak"
 
     def test_skips_rows_with_no_text(self, tmp_path: Path) -> None:
-        mock_dataset = self._mock_dataset_dict([
-            {"Goal": ""},
-            {"Goal": None},
-            {"Goal": "Valid prompt"},
-        ])
+        mock_dataset = self._mock_dataset_dict(
+            [
+                {"Goal": ""},
+                {"Goal": None},
+                {"Goal": "Valid prompt"},
+            ]
+        )
         with patch("data.download.load_dataset", return_value=mock_dataset):
             download_jailbreak_bench(tmp_path)
 

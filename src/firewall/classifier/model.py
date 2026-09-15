@@ -43,10 +43,7 @@ class FirewallClassifier:
         with torch.no_grad():
             logits = self.model(**encoding).logits
         probs = torch.softmax(logits, dim=-1).cpu().tolist()
-        return [
-            {self.id2label[i]: float(p) for i, p in enumerate(prob)}
-            for prob in probs
-        ]
+        return [{self.id2label[i]: float(p) for i, p in enumerate(prob)} for prob in probs]
 
     def save(self, output_dir: str | Path) -> None:
         """Save model weights + tokenizer to output_dir."""

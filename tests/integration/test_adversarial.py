@@ -78,9 +78,9 @@ class TestAdversarialRobustness:
         assert prompts, f"no prompts found for attack_type={attack_type}"
         for prompt in prompts:
             top_label, threat_score = _classify(classifier, prompt["text"])
-            assert (
-                top_label != "benign"
-            ), f"[{attack_type}] misclassified as benign: {prompt['text'][:80]}..."
+            assert top_label != "benign", (
+                f"[{attack_type}] misclassified as benign: {prompt['text'][:80]}..."
+            )
 
     # --- Historically hard categories (encoding/language barriers) ---
 
@@ -97,9 +97,9 @@ class TestAdversarialRobustness:
         assert prompts, f"no prompts found for attack_type={attack_type}"
         for prompt in prompts:
             top_label, threat_score = _classify(classifier, prompt["text"])
-            assert (
-                top_label != "benign"
-            ), f"[{attack_type}] misclassified as benign: {prompt['text'][:80]}..."
+            assert top_label != "benign", (
+                f"[{attack_type}] misclassified as benign: {prompt['text'][:80]}..."
+            )
 
     # --- Aggregate detection rate ---
 
@@ -115,6 +115,6 @@ class TestAdversarialRobustness:
             if top_label != "benign":
                 detected += 1
         rate = detected / len(adversarial_prompts)
-        assert (
-            rate >= 0.5
-        ), f"detection rate {rate:.0%} ({detected}/{len(adversarial_prompts)}) is below 50%"
+        assert rate >= 0.5, (
+            f"detection rate {rate:.0%} ({detected}/{len(adversarial_prompts)}) is below 50%"
+        )

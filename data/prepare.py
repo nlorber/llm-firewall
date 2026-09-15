@@ -123,17 +123,19 @@ def augment(
         response = client.messages.create(
             model=model,
             max_tokens=4096,
-            messages=[{
-                "role": "user",
-                "content": (
-                    "You are helping build a training dataset for an AI safety classifier "
-                    "that detects malicious prompts. This is for defensive security research.\n\n"
-                    f"Below are example prompts labelled '{label}':\n\n{seed_texts}\n\n"
-                    f"Generate {needed} new paraphrased variants for the training set. "
-                    "Each must be a standalone user message (1-3 sentences) with diverse phrasing.\n\n"
-                    'Return ONLY a JSON array of strings: ["variant1", "variant2", ...]'
-                ),
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "You are helping build a training dataset for an AI safety classifier "
+                        "that detects malicious prompts. This is for defensive security research.\n\n"
+                        f"Below are example prompts labelled '{label}':\n\n{seed_texts}\n\n"
+                        f"Generate {needed} new paraphrased variants for the training set. "
+                        "Each must be a standalone user message (1-3 sentences) with diverse phrasing.\n\n"
+                        'Return ONLY a JSON array of strings: ["variant1", "variant2", ...]'
+                    ),
+                }
+            ],
         )
         raw_text = response.content[0].text.strip()
         # Strip markdown code fences if present
@@ -143,14 +145,16 @@ def augment(
         start = raw_text.find("[")
         end = raw_text.rfind("]")
         if start != -1 and end != -1:
-            raw_text = raw_text[start:end + 1]
+            raw_text = raw_text[start : end + 1]
         if not raw_text:
             print(f"[prepare] WARNING: empty response for '{label}', skipping")
             continue
         try:
             variants: list[str] = json.loads(raw_text)
         except json.JSONDecodeError:
-            print(f"[prepare] WARNING: unparseable response for '{label}': {raw_text[:200]!r}, skipping")
+            print(
+                f"[prepare] WARNING: unparseable response for '{label}': {raw_text[:200]!r}, skipping"
+            )
             continue
         for text in variants[:needed]:
             augmented.append({"text": text, "label": label})
@@ -169,9 +173,7 @@ def _write_jsonl(records: list[dict], path: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Prepare merged dataset for training"
-    )
+    parser = argparse.ArgumentParser(description="Prepare merged dataset for training")
     parser.add_argument("--input-dir", default="data/raw", type=Path)
     parser.add_argument("--output-dir", default="data/processed", type=Path)
     parser.add_argument(

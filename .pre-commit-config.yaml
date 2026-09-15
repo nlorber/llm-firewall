@@ -1,8 +1,7 @@
 repos:
-  # ruff lint runs from the project uv env so it matches `make lint` / CI exactly.
-  # A pinned hook rev drifts from uv.lock and yields CI-only lint failures (e.g.
-  # import-sort rules the older ruff missed). ruff-format stays pinned — it is not
-  # CI-gated, and pinning avoids reformatting the whole tree on a version bump.
+  # ruff lint and format run from the project uv env so they match `make lint` / CI
+  # exactly. A pinned hook rev drifts from uv.lock: an older ruff misses lint rules
+  # and formats differently, so the hook and the CI format check fight over files.
   - repo: local
     hooks:
       - id: ruff
@@ -10,10 +9,11 @@ repos:
         entry: uv run ruff check --fix
         language: system
         types: [python]
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
-    hooks:
       - id: ruff-format
+        name: ruff (format, uv)
+        entry: uv run ruff format
+        language: system
+        types: [python]
 
   # Run mypy in the project's uv env (not an isolated hook env) so it sees the
   # installed deps and the pyproject config — identical to `make typecheck`.

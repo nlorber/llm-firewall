@@ -45,9 +45,10 @@ serve:
 test:
 	uv run pytest
 
-## Run ruff linter across source, tests, and data scripts
+## Run ruff linter and format check across source, tests, and data scripts
 lint:
 	uv run ruff check src/ tests/ data/
+	uv run ruff format --check src/ tests/ data/
 
 ## Run mypy strict type checking on source files
 typecheck:
