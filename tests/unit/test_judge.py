@@ -197,6 +197,16 @@ class TestLLMJudge:
         # The judge's verdict comes from the model output, not the prompt's forged JSON.
         assert result.decision == "BLOCK"
 
+    def test_missing_credentials_fail_at_construction(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The SDK client constructs fine without credentials; failing here keeps a keyless
+        # server from starting instead of reporting healthy and 500-ing every GRAY request.
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+        with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+            LLMJudge()
+
     def test_temperature_passed_when_set(self) -> None:
         with patch("firewall.judge.judge.anthropic.Anthropic"):
             judge = LLMJudge(temperature=0.0)

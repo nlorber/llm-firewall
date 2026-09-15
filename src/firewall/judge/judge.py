@@ -44,6 +44,10 @@ class LLMJudge:
         self._backoff_base = backoff_base
         self._temperature = temperature
         self._client = anthropic.Anthropic()
+        # The client constructs without credentials and only fails per request, which would
+        # let a server report healthy while every GRAY prompt 500s. Fail at startup instead.
+        if self._client.api_key is None and self._client.auth_token is None:
+            raise RuntimeError("LLMJudge needs ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN) set")
 
     def judge(
         self,

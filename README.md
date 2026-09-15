@@ -239,7 +239,7 @@ make train
 # 4. Evaluate
 make evaluate
 
-# 5. Serve (requires ANTHROPIC_API_KEY for the LLM judge)
+# 5. Serve (requires ANTHROPIC_API_KEY for the LLM judge; the server refuses to start without it)
 make serve
 
 # Then open http://localhost:8000 for the interactive threat console, or call the API:
