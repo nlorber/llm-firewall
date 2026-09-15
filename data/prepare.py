@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
+import re
+from collections import Counter
 from pathlib import Path
 
 import anthropic
@@ -22,6 +25,13 @@ _LABEL_MAP: dict[str, str] = {
     "exfiltration": "exfiltration",
     "escalation": "escalation",
 }
+
+_SEED = 42
+# Word-set overlap above which two prompts count as the same example. Paraphrases reuse most
+# of their vocabulary, so this catches them while leaving distinct prompts of the same attack
+# family alone.
+_NEAR_DUP_JACCARD = 0.8
+_MAX_SEEDS = 30
 
 
 def load_raw(input_dir: Path) -> list[dict]:
@@ -48,25 +58,48 @@ def harmonise_labels(records: list[dict]) -> list[dict]:
     return result
 
 
+def _word_set(text: str) -> frozenset[str]:
+    return frozenset(re.findall(r"\w+", text.lower()))
+
+
 def deduplicate(records: list[dict]) -> list[dict]:
-    """Remove duplicates by normalised (lowercased, stripped) text, keep first."""
-    seen: set[str] = set()
-    result: list[dict] = []
+    """Drop exact and near-duplicate texts, keeping the first occurrence.
+
+    Runs before the split: a prompt and its paraphrase on opposite sides of the split would
+    measure the model on rows it effectively trained on.
+    """
+    # ponytail: O(n^2) word-set comparison, fine at this corpus's scale (~10^3 rows);
+    # switch to MinHash/LSH if it grows past ~10^4.
+    seen_exact: set[str] = set()
+    kept: list[dict] = []
+    kept_words: list[frozenset[str]] = []
+    near = 0
     for r in records:
         key = r["text"].lower().strip()
-        if key not in seen:
-            seen.add(key)
-            result.append(r)
+        if key in seen_exact:
+            continue
+        words = _word_set(r["text"])
+        if words and any(
+            len(words & other) / len(words | other) >= _NEAR_DUP_JACCARD for other in kept_words
+        ):
+            near += 1
+            continue
+        seen_exact.add(key)
+        kept.append(r)
+        kept_words.append(words)
     before = len(records)
-    print(f"[prepare] dedup: {before} → {len(result)} records ({before - len(result)} removed)")
-    return result
+    print(
+        f"[prepare] dedup: {before} → {len(kept)} records "
+        f"({before - len(kept)} removed, {near} of them near-duplicates)"
+    )
+    return kept
 
 
 def stratified_split(
     records: list[dict],
     val_ratio: float = 0.15,
     test_ratio: float = 0.15,
-    seed: int = 42,
+    seed: int = _SEED,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Stratified train/val/test split preserving class distribution."""
     texts = [r["text"] for r in records]
@@ -95,20 +128,25 @@ def augment(
     records: list[dict],
     target_per_class: int | None = None,
     model: str = "claude-haiku-4-5-20251001",
+    seed: int = _SEED,
 ) -> list[dict]:
     """Paraphrase examples in underrepresented classes to balance the dataset.
 
-    For each class below ``target_per_class``, generates paraphrased variants
-    via Claude until the class reaches the target count. If ``target_per_class``
-    is None, uses the count of the largest class.
-    """
-    from collections import Counter
+    Takes the **training split only** — a paraphrase of a held-out row would leak it into
+    training. For each class below ``target_per_class``, generates paraphrased variants via
+    Claude until the class reaches the target count. If ``target_per_class`` is None, uses the
+    count of the largest class.
 
+    Raises:
+        RuntimeError: if a class's paraphrase request returns nothing usable. Silently
+            skipping would leave the class short and the imbalance unexplained.
+    """
     dist = Counter(r["label"] for r in records)
     if target_per_class is None:
         target_per_class = max(dist.values())
 
     client = anthropic.Anthropic()
+    rng = random.Random(seed)
     augmented: list[dict] = list(records)
 
     for label, count in dist.items():
@@ -118,7 +156,8 @@ def augment(
 
         # Sample existing examples as paraphrase seeds
         originals = [r["text"] for r in records if r["label"] == label]
-        seed_texts = "\n".join(f"- {t}" for t in originals[:30])
+        seeds = rng.sample(originals, min(_MAX_SEEDS, len(originals)))
+        seed_texts = "\n".join(f"- {t}" for t in seeds)
 
         response = client.messages.create(
             model=model,
@@ -147,19 +186,23 @@ def augment(
         if start != -1 and end != -1:
             raw_text = raw_text[start : end + 1]
         if not raw_text:
-            print(f"[prepare] WARNING: empty response for '{label}', skipping")
-            continue
+            raise RuntimeError(f"augmentation for '{label}' returned an empty response")
         try:
             variants: list[str] = json.loads(raw_text)
-        except json.JSONDecodeError:
-            print(
-                f"[prepare] WARNING: unparseable response for '{label}': {raw_text[:200]!r}, skipping"
-            )
-            continue
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"augmentation for '{label}' returned unparseable JSON: {raw_text[:200]!r}"
+            ) from exc
+
         for text in variants[:needed]:
             augmented.append({"text": text, "label": label})
-
-        print(f"[prepare] augment '{label}': {count} → {count + min(len(variants), needed)}")
+        added = min(len(variants), needed)
+        if added < needed:
+            print(
+                f"[prepare] WARNING: '{label}' asked for {needed} variants, got {added} "
+                f"— class stays below the {target_per_class} target"
+            )
+        print(f"[prepare] augment '{label}': {count} → {count + added}")
 
     return augmented
 
@@ -187,17 +230,19 @@ def main() -> None:
     records = harmonise_labels(records)
     records = deduplicate(records)
 
+    # Split before augmenting: paraphrases are generated from training rows only, so none of
+    # them can appear in val or test.
+    train, val, test = stratified_split(records)
+    print(f"[prepare] split: train={len(train)} val={len(val)} test={len(test)}")
+
     if not args.skip_augment:
-        records = augment(records)
+        train = augment(train)
     else:
         print("[prepare] skipping augmentation (--skip-augment)")
 
-    from collections import Counter
-
-    dist = Counter(r["label"] for r in records)
-    print("[prepare] class distribution:", dict(dist))
-
-    train, val, test = stratified_split(records)
+    print("[prepare] train class distribution:", dict(Counter(r["label"] for r in train)))
+    print("[prepare] val class distribution:", dict(Counter(r["label"] for r in val)))
+    print("[prepare] test class distribution:", dict(Counter(r["label"] for r in test)))
 
     _write_jsonl(train, args.output_dir / "train.jsonl")
     _write_jsonl(val, args.output_dir / "val.jsonl")
