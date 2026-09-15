@@ -135,9 +135,11 @@ Two mitigations are in place (`judge/judge.py`):
 | Source | Class | Count | Method |
 |---|---|---|---|
 | deepset/prompt-injections | benign, injection | ~546 | HuggingFace hub download |
-| JailbreakBench/JBB-Behaviors | jailbreak | ~200 | HuggingFace hub download |
+| jackhhao/jailbreak-classification | jailbreak, benign | ~300 per class | Hub download; deduplicated, unfilled templates dropped, sampled per label |
 | Claude API synthetic | exfiltration | ~119 | LLM-generated examples |
 | Claude API synthetic | escalation | ~106 | LLM-generated examples |
+
+The classes describe **what a prompt does to the assistant**, not how harmful its subject matter is (`data/README.md` holds the full definitions and the boundaries between neighbouring classes). `JailbreakBench/JBB-Behaviors` was the original `jailbreak` source and was dropped: its rows are harmful *content* requests rather than bypass *techniques*, and both its `harmful` and `benign` splits were ingested under the `jailbreak` label. The replacement source carries roleplay/persona rows labelled benign, which are kept as hard negatives so that persona framing alone does not read as an attack. The committed classifier checkpoint predates this change.
 
 ### Label harmonisation
 
@@ -145,15 +147,15 @@ Source datasets use different label schemes (`"0"`, `"1"`, `"jailbreak"`, etc.).
 
 ### Deduplication
 
-Case-insensitive exact-match deduplication. The first occurrence is kept. This handles overlapping examples between datasets (e.g., a prompt appearing in both deepset and JailbreakBench with different labels).
+Case-insensitive exact-match deduplication, plus near-duplicate removal (word-set Jaccard ≥ 0.8) for paraphrase-level copies. The first occurrence is kept. This handles overlapping examples between datasets, and it runs **before** the split so that a prompt and its near-copy cannot land on opposite sides of it and inflate held-out scores.
 
 ### Augmentation
 
-LLM-based paraphrasing via Claude API for underrepresented classes (`exfiltration`, `escalation`). This produces semantically equivalent variants rather than simple token-level perturbations. Can be skipped with `--skip-augment` when no API key is available.
+LLM-based paraphrasing via Claude API for underrepresented classes (`exfiltration`, `escalation`). This produces semantically equivalent variants rather than simple token-level perturbations. It is applied to the **training split only**, after the split, so a paraphrase of a held-out prompt cannot leak into training. An empty or unparseable response raises rather than silently leaving the class short. Can be skipped with `--skip-augment` when no API key is available.
 
 ### Split strategy
 
-Stratified 70/15/15 train/val/test split using scikit-learn's `StratifiedShuffleSplit` with seed=42 for reproducibility. Stratification ensures each class is proportionally represented in all splits, which matters when the smallest class (escalation) has only ~106 examples.
+Stratified 70/15/15 train/val/test split using scikit-learn's `StratifiedShuffleSplit` with seed=42 for reproducibility, run before augmentation. Stratification ensures each class is proportionally represented in all splits, which matters when the smallest class (escalation) has only ~106 examples. Val and test therefore keep the raw class distribution; only train is balanced.
 
 ---
 
