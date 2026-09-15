@@ -113,6 +113,7 @@ class TestFirewallClassifier:
             mock_tok_inst.return_value = {
                 "input_ids": torch.zeros(1, 16, dtype=torch.long),
                 "attention_mask": torch.ones(1, 16, dtype=torch.long),
+                "overflow_to_sample_mapping": torch.tensor([0]),
             }
             mock_t.from_pretrained.return_value = mock_tok_inst
 
@@ -126,9 +127,29 @@ class TestFirewallClassifier:
         mock_t.return_value = {
             "input_ids": torch.zeros(2, 16, dtype=torch.long),
             "attention_mask": torch.ones(2, 16, dtype=torch.long),
+            "overflow_to_sample_mapping": torch.tensor([0, 1]),
         }
         results = clf.predict(["hello", "ignore"])
         assert len(results) == 2
+
+    def test_long_prompt_scored_by_most_threatening_window(self) -> None:
+        # Text 0 fits one window; text 1 overflows into two, and only its tail window holds
+        # the injection. Text 1 must be reported by that window, not by its benign head.
+        clf, mock_m, mock_t = self._make_mock_classifier()
+        mock_t.return_value = {
+            "input_ids": torch.zeros(3, 16, dtype=torch.long),
+            "attention_mask": torch.ones(3, 16, dtype=torch.long),
+            "overflow_to_sample_mapping": torch.tensor([0, 1, 1]),
+        }
+        mock_m.return_value.logits = torch.tensor(
+            [[5.0, 0.0, 0.0, 0.0, 0.0], [5.0, 0.0, 0.0, 0.0, 0.0], [0.0, 5.0, 0.0, 0.0, 0.0]]
+        )
+        results = clf.predict(["short", "long benign preamble then an injection"])
+        assert len(results) == 2
+        assert max(results[0], key=results[0].__getitem__) == "benign"
+        assert max(results[1], key=results[1].__getitem__) == "injection"
+        assert mock_t.call_args.kwargs["return_overflowing_tokens"] is True
+        assert "overflow_to_sample_mapping" not in mock_m.call_args.kwargs
 
     def test_predict_output_has_all_label_keys(self) -> None:
         clf, _, _ = self._make_mock_classifier()

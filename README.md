@@ -378,7 +378,7 @@ Key metrics:
 | `port` | `8000` | Server port |
 | `log_level` | `info` | Uvicorn log level |
 | `model_path` | `models/classifier` | Path to fine-tuned checkpoint (overridden by `MODEL_PATH` env var) |
-| `max_length` | `512` | Token sequence length for inference (higher than training's 128 to handle longer prompts) |
+| `max_length` | `512` | Scoring window size. Longer prompts are scored as overlapping windows and take their most threatening window, so an injection appended after a benign preamble is still seen |
 
 ### `configs/orchestrator.yaml`
 

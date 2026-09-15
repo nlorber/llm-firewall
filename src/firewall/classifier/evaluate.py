@@ -16,7 +16,7 @@ from sklearn.metrics import (
 )
 
 from firewall.classifier.dataset import LABEL2ID, _load_jsonl
-from firewall.classifier.model import load_classifier
+from firewall.classifier.model import load_classifier, threat_score
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +57,6 @@ def evaluate(
             y_true, y_pred, labels=all_label_ids, target_names=label_names, zero_division=0
         ),
     }
-
-
-def threat_score(scores: dict[str, float]) -> float:
-    """Max probability across non-benign classes — mirrors the orchestrator's routing."""
-    return max((v for k, v in scores.items() if k != "benign"), default=0.0)
 
 
 def compute_robustness_metrics(
