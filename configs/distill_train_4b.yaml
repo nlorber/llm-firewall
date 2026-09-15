@@ -3,7 +3,7 @@
 #
 # High-capacity settings (rank 32, all 36 layers): a rank-8 / 8-layer adapter could not learn
 # the benign/malicious boundary and collapsed to ~35% specificity (over-blocking). Raising
-# capacity lifted benign-PASS to ~85% while holding ~94% BLOCK recall. The bigger adapter is
+# capacity lifted benign-PASS to ~85% while holding ~92% BLOCK recall. The bigger adapter is
 # unstable at the 1.7B's lr=1e-4 (val loss diverges), so lr is lowered to 3e-5. Best checkpoint
 # is ~iter 100 by val loss (it overfits after) — select it, don't take the final.
 
