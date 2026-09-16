@@ -39,6 +39,10 @@ _SEED_CHARS = 300
 # roleplay hard negatives) from dominating the attack classes.
 _AUGMENT_CHUNK = 50
 _CLASS_TARGET = 250
+# Long-document examples: how many benign prompts get concatenated into one document, and how
+# many documents each split receives (attack-carrying and attack-free in equal number).
+_DOC_PARTS = (4, 10)
+_DOC_COUNTS = {"train": 160, "val": 40, "test": 40}
 
 
 def load_raw(input_dir: Path) -> list[dict]:
@@ -133,6 +137,39 @@ def stratified_split(
     train = [trainval_records[i] for i in train_idx]
     val = [trainval_records[i] for i in val_idx]
     return train, val, test_records
+
+
+def make_context_examples(records: list[dict], count: int, seed: int = _SEED) -> list[dict]:
+    """Build long-document examples: benign prompts concatenated, half carrying an attack.
+
+    Serving scores an over-length prompt as overlapping windows and keeps the most
+    threatening one, so a window is typically a lot of benign text with at most one attack
+    sentence inside it. Trained only on standalone prompts, the model reads such a window as
+    benign and the attack is passed as CLEAN — below the gray band, so the judge never sees
+    it either. These examples put that shape in the training distribution.
+
+    ``count`` attack-carrying documents are produced *and* ``count`` attack-free ones: without
+    the second half the model would simply learn that a long document is an attack.
+
+    Built from ``records`` alone, so a document never mixes text across a split boundary.
+    Returns the new records; the caller appends them.
+    """
+    rng = random.Random(seed)
+    benign = [r["text"] for r in records if r["label"] == "benign"]
+    attacks = [r for r in records if r["label"] != "benign"]
+    if len(benign) < _DOC_PARTS[1] or not attacks:
+        return []
+
+    built: list[dict] = []
+    for _ in range(count):
+        parts = rng.sample(benign, rng.randint(*_DOC_PARTS))
+        attack = rng.choice(attacks)
+        parts.insert(rng.randint(0, len(parts)), attack["text"])
+        built.append({"text": " ".join(parts), "label": attack["label"]})
+    for _ in range(count):
+        parts = rng.sample(benign, rng.randint(*_DOC_PARTS))
+        built.append({"text": " ".join(parts), "label": "benign"})
+    return built
 
 
 def _paraphrase(
@@ -300,6 +337,13 @@ def main() -> None:
     else:
         print("[prepare] skipping augmentation (--skip-augment)")
     train = cap_classes(train)
+
+    # Long-document examples come last so the capping step cannot discard them. Each split
+    # builds its own from its own rows.
+    for name, split in (("train", train), ("val", val), ("test", test)):
+        extra = make_context_examples(split, _DOC_COUNTS[name])
+        split.extend(extra)
+        print(f"[prepare] {name}: +{len(extra)} long-document examples (half attack-carrying)")
 
     print("[prepare] train class distribution:", dict(Counter(r["label"] for r in train)))
     print("[prepare] val class distribution:", dict(Counter(r["label"] for r in val)))
