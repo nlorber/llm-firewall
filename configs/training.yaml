@@ -14,8 +14,9 @@ label_names:
 train_path: "data/processed/train.jsonl"
 val_path:   "data/processed/val.jsonl"
 test_path:  "data/processed/test.jsonl"
-max_length: 128  # prompts are 1-3 sentences; 128 is sufficient for training.
-                 # Inference uses 512 (serving.yaml) so longer prompts are still handled.
+max_length: 256  # jailbreak templates run to a few hundred tokens (median ~270), so 128
+                 # truncated most of the class away. Inference scores 512-token windows
+                 # (serving.yaml), so longer prompts are still handled there.
 
 # Optimisation
 learning_rate:  2.0e-5
