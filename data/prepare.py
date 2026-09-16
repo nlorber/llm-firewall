@@ -5,7 +5,7 @@ import argparse
 import json
 import random
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import anthropic
@@ -32,6 +32,13 @@ _SEED = 42
 # family alone.
 _NEAR_DUP_JACCARD = 0.8
 _MAX_SEEDS = 30
+_SEED_CHARS = 300
+# Variants requested per call, and the per-class size the corpus is levelled to — classes
+# below it are topped up by paraphrase where the model will do it, classes above it are
+# sampled down. Levelling from both sides is what keeps the benign class (which carries the
+# roleplay hard negatives) from dominating the attack classes.
+_AUGMENT_CHUNK = 50
+_CLASS_TARGET = 250
 
 
 def load_raw(input_dir: Path) -> list[dict]:
@@ -60,6 +67,10 @@ def harmonise_labels(records: list[dict]) -> list[dict]:
 
 def _word_set(text: str) -> frozenset[str]:
     return frozenset(re.findall(r"\w+", text.lower()))
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.lower().split())
 
 
 def deduplicate(records: list[dict]) -> list[dict]:
@@ -124,87 +135,136 @@ def stratified_split(
     return train, val, test_records
 
 
+def _paraphrase(
+    client: anthropic.Anthropic,
+    model: str,
+    label: str,
+    originals: list[str],
+    n: int,
+    rng: random.Random,
+) -> list[str]:
+    """Request ``n`` paraphrased variants for one class. Retries once, then raises.
+
+    Raises:
+        RuntimeError: if both attempts return something that is not a JSON array. A refusal
+            reads as prose and lands here too: the assistant declines to mass-produce attack
+            text, which is a legitimate answer and must surface rather than pass as success.
+    """
+    seeds = rng.sample(originals, min(_MAX_SEEDS, len(originals)))
+    seed_texts = "\n".join(f"- {t[:_SEED_CHARS]}" for t in seeds)
+    prompt = (
+        "You are helping build a training dataset for an AI safety classifier "
+        "that detects malicious prompts. This is for defensive security research.\n\n"
+        f"Below are example prompts labelled '{label}':\n\n{seed_texts}\n\n"
+        f"Generate {n} new paraphrased variants for the training set. "
+        "Each must be a standalone user message (1-3 sentences) with diverse phrasing.\n\n"
+        'Return ONLY a JSON array of strings: ["variant1", "variant2", ...]'
+    )
+
+    last = ""
+    for _ in range(2):
+        response = client.messages.create(
+            model=model, max_tokens=4096, messages=[{"role": "user", "content": prompt}]
+        )
+        raw_text = response.content[0].text.strip()
+        last = raw_text
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        start, end = raw_text.find("["), raw_text.rfind("]")
+        if start == -1 or end == -1:
+            continue
+        try:
+            variants = json.loads(raw_text[start : end + 1])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(variants, list):
+            return [v for v in variants if isinstance(v, str) and v.strip()]
+    raise RuntimeError(f"augmentation for '{label}' returned no usable JSON: {last[:200]!r}")
+
+
 def augment(
     records: list[dict],
-    target_per_class: int | None = None,
+    target_per_class: int = _CLASS_TARGET,
     model: str = "claude-haiku-4-5-20251001",
     seed: int = _SEED,
 ) -> list[dict]:
-    """Paraphrase examples in underrepresented classes to balance the dataset.
+    """Paraphrase examples in underrepresented classes towards ``target_per_class``.
 
     Takes the **training split only** — a paraphrase of a held-out row would leak it into
-    training. For each class below ``target_per_class``, generates paraphrased variants via
-    Claude until the class reaches the target count. If ``target_per_class`` is None, uses the
-    count of the largest class.
+    training. Short classes are topped up in batches of ``_AUGMENT_CHUNK``; duplicates of text
+    already in the corpus are discarded.
 
-    Raises:
-        RuntimeError: if a class's paraphrase request returns nothing usable. Silently
-            skipping would leave the class short and the imbalance unexplained.
+    A class the model declines to paraphrase is reported and left at its real size rather than
+    abandoning the whole run: the assistant refuses to mass-produce injection and jailbreak
+    text, so those classes are levelled by capping the larger ones instead (see
+    :func:`cap_classes`). Every shortfall is printed, so a class is never quietly left short.
     """
     dist = Counter(r["label"] for r in records)
-    if target_per_class is None:
-        target_per_class = max(dist.values())
-
     client = anthropic.Anthropic()
     rng = random.Random(seed)
     augmented: list[dict] = list(records)
+    seen = {_norm(r["text"]) for r in records}
+    shortfalls: dict[str, int] = {}
 
-    for label, count in dist.items():
+    for label, count in sorted(dist.items()):
         needed = target_per_class - count
         if needed <= 0:
             continue
-
-        # Sample existing examples as paraphrase seeds
         originals = [r["text"] for r in records if r["label"] == label]
-        seeds = rng.sample(originals, min(_MAX_SEEDS, len(originals)))
-        seed_texts = "\n".join(f"- {t}" for t in seeds)
-
-        response = client.messages.create(
-            model=model,
-            max_tokens=4096,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "You are helping build a training dataset for an AI safety classifier "
-                        "that detects malicious prompts. This is for defensive security research.\n\n"
-                        f"Below are example prompts labelled '{label}':\n\n{seed_texts}\n\n"
-                        f"Generate {needed} new paraphrased variants for the training set. "
-                        "Each must be a standalone user message (1-3 sentences) with diverse phrasing.\n\n"
-                        'Return ONLY a JSON array of strings: ["variant1", "variant2", ...]'
-                    ),
-                }
-            ],
-        )
-        raw_text = response.content[0].text.strip()
-        # Strip markdown code fences if present
-        if raw_text.startswith("```"):
-            raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        # Extract JSON array if surrounded by other text
-        start = raw_text.find("[")
-        end = raw_text.rfind("]")
-        if start != -1 and end != -1:
-            raw_text = raw_text[start : end + 1]
-        if not raw_text:
-            raise RuntimeError(f"augmentation for '{label}' returned an empty response")
-        try:
-            variants: list[str] = json.loads(raw_text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"augmentation for '{label}' returned unparseable JSON: {raw_text[:200]!r}"
-            ) from exc
-
-        for text in variants[:needed]:
-            augmented.append({"text": text, "label": label})
-        added = min(len(variants), needed)
-        if added < needed:
-            print(
-                f"[prepare] WARNING: '{label}' asked for {needed} variants, got {added} "
-                f"— class stays below the {target_per_class} target"
-            )
+        added = 0
+        while added < needed:
+            batch = min(_AUGMENT_CHUNK, needed - added)
+            try:
+                variants = _paraphrase(client, model, label, originals, batch, rng)
+            except RuntimeError as exc:
+                print(f"[prepare] WARNING: {exc}")
+                shortfalls[label] = count + added
+                break
+            fresh = 0
+            for text in variants:
+                key = _norm(text)
+                if key in seen:
+                    continue
+                seen.add(key)
+                augmented.append({"text": text, "label": label})
+                added += 1
+                fresh += 1
+                if added >= needed:
+                    break
+            if fresh == 0:
+                print(f"[prepare] WARNING: '{label}' batch returned only duplicates, stopping")
+                shortfalls[label] = count + added
+                break
         print(f"[prepare] augment '{label}': {count} → {count + added}")
 
+    if shortfalls:
+        print(f"[prepare] WARNING: below the {target_per_class} target: {shortfalls}")
     return augmented
+
+
+def cap_classes(
+    records: list[dict], target_per_class: int = _CLASS_TARGET, seed: int = _SEED
+) -> list[dict]:
+    """Sample classes larger than ``target_per_class`` down to it.
+
+    The counterpart to :func:`augment`: where a class cannot be (or need not be) grown, the
+    balance is made by shrinking the others. Without this, benign — which carries every
+    roleplay hard negative — outnumbers each attack class and the model trades recall for
+    precision.
+    """
+    rng = random.Random(seed)
+    by_label: dict[str, list[dict]] = defaultdict(list)
+    for r in records:
+        by_label[r["label"]].append(r)
+
+    kept: list[dict] = []
+    for label, rows in sorted(by_label.items()):
+        if len(rows) > target_per_class:
+            print(f"[prepare] cap '{label}': {len(rows)} → {target_per_class}")
+            kept.extend(rng.sample(rows, target_per_class))
+        else:
+            kept.extend(rows)
+    return kept
 
 
 def _write_jsonl(records: list[dict], path: Path) -> None:
@@ -239,6 +299,7 @@ def main() -> None:
         train = augment(train)
     else:
         print("[prepare] skipping augmentation (--skip-augment)")
+    train = cap_classes(train)
 
     print("[prepare] train class distribution:", dict(Counter(r["label"] for r in train)))
     print("[prepare] val class distribution:", dict(Counter(r["label"] for r in val)))
