@@ -40,18 +40,31 @@ its rows are harmful *content* requests rather than jailbreak techniques, and bo
 
 ## Statistics
 
-The counts below describe the corpus behind the **currently committed classifier
-checkpoint**, which predates the source change above. Re-running `download.py` and
-`prepare.py` produces a different mix, so these numbers are regenerated with the model.
+Counts from the run behind the committed checkpoint. The synthetic sources and the
+paraphrase step vary per run, so a rebuild shifts these by a few tens of rows.
 
-| Class | Count |
-|---|---|
-| benign | 343 |
-| injection | 318 |
-| exfiltration | 303 |
-| jailbreak | 200 |
-| escalation | 106 |
-| **Total** | **1,270** |
+| Class | Train | Val | Test |
+|---|---|---|---|
+| benign | 410 | 132 | 132 |
+| jailbreak | 306 | 61 | 56 |
+| exfiltration | 301 | 19 | 27 |
+| injection | 208 | 41 | 39 |
+| escalation | 201 | 21 | 21 |
+| **Total** | **1,426** | **274** | **275** |
+
+## Long-document examples
+
+Serving scores an over-length prompt as overlapping windows and keeps the most threatening
+one, so a window is usually a lot of benign text containing at most one attack sentence.
+Trained only on standalone prompts, the model reads such a window as benign and the attack is
+passed as CLEAN — below the gray band, so the judge never sees it either.
+
+`prepare.py:make_context_examples()` therefore adds documents built by concatenating benign
+prompts, half of them with an attack spliced in at a random position and labelled with that
+attack's class: **+320 train, +80 val, +80 test**. The attack-free half is load-bearing —
+without it the model learns "long document = attack". Each split builds its documents from
+its own rows, so no text crosses the split boundary, and they are added after capping so the
+balancing step cannot discard them.
 
 ## Splits
 

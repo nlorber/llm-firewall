@@ -62,46 +62,65 @@ uncertain verdicts to Claude — see [Local Judge (distilled SLM)](#local-judge-
 > Run `make train` then `make evaluate` to reproduce. See `notebooks/02_training_curves.ipynb` for convergence plots.
 
 The headline numbers below are **in-distribution**: the test split is drawn from the same
-synthetic generator as training, so 99.5% is an optimistic ceiling, not a field number. See
+sources as training (`deepset/prompt-injections`, `jackhhao/jailbreak-classification`, and
+Claude-generated examples), so it is an optimistic ceiling, not a field number. It also
+includes the constructed long documents described below, which is why accuracy sits well
+under the 99% the earlier, easier split reported. See
 [Out-of-Distribution Robustness](#out-of-distribution-robustness) for held-out generalization.
 
 | Metric | Value |
 |---|---|
-| Test accuracy | 0.9948 |
-| Test F1 macro | 0.9947 |
-| Val accuracy | 0.9895 |
-| Val F1 macro | 0.9877 |
+| Test accuracy | 0.8655 |
+| Test F1 macro | 0.8659 |
+| Val accuracy | 0.9307 |
+| Val F1 macro | 0.9398 |
 
 ### Per-Class Performance
 
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
-| benign | 0.9804 | 1.0000 | 0.9901 | 52 |
-| injection | 1.0000 | 1.0000 | 1.0000 | 48 |
-| jailbreak | 1.0000 | 0.9667 | 0.9831 | 30 |
-| exfiltration | 1.0000 | 1.0000 | 1.0000 | 45 |
-| escalation | 1.0000 | 1.0000 | 1.0000 | 16 |
+| benign | 1.00 | 0.79 | 0.88 | 132 |
+| injection | 0.58 | 0.97 | 0.73 | 39 |
+| jailbreak | 0.92 | 0.96 | 0.94 | 56 |
+| exfiltration | 0.88 | 0.78 | 0.82 | 27 |
+| escalation | 0.91 | 1.00 | 0.95 | 21 |
+
+Benign precision is 1.00 and benign recall 0.79: the model never calls an attack benign on
+this split, and pays for it by over-flagging benign input. Injection precision (0.58) is the
+mirror image — it is the class other attacks get mistaken for.
 
 ### Out-of-Distribution Robustness
 
-To probe generalization beyond the synthetic test split, the classifier is evaluated on a
-held-out set of 20 hand-crafted **obfuscated** attacks (base64, unicode homoglyphs, payload
-splitting, multilingual, persona roleplay, …) that share no text with the training data. The
-set is all-threat, so it measures **detection recall on novel attacks**, not false-positive
-rate.
+To probe generalization beyond the test split, the classifier is evaluated on a held-out set
+of 20 hand-crafted **obfuscated** attacks (base64, unicode homoglyphs, payload splitting,
+multilingual, persona roleplay, …) that share no text with the training data. The set is
+all-threat, so it measures **detection recall on novel attacks**, not false-positive rate.
 
 | Metric (n=20, out-of-distribution) | Value |
 |---|---|
 | Detection recall — flagged, not passed as CLEAN | 1.00 |
 | Block rate — hard-blocked by the classifier alone | 0.95 |
-| Exact attack-class accuracy | 0.65 |
+| Exact attack-class accuracy | 0.70 |
 
 The gap between these three is the point: **detection generalizes** — every obfuscated attack
-is caught as a threat — while **fine-grained class labeling degrades** from 99.5%
-in-distribution to 65% out-of-distribution. The model reliably knows *that* a prompt is
-hostile while often mislabeling *which* attack type (persona-roleplay is the weakest class).
-The single attack not hard-blocked lands in the GRAY zone and would be routed to the LLM
-judge — the hybrid design's intended safety net for exactly this case.
+is caught as a threat — while **fine-grained class labeling degrades** to 70%. The model
+reliably knows *that* a prompt is hostile while often mislabeling *which* attack type. The
+single attack not hard-blocked lands in the GRAY zone and would be routed to the LLM judge —
+the hybrid design's intended safety net for exactly this case.
+
+### Attacks Buried in Long Documents
+
+An over-length prompt is scored as overlapping windows (see `max_length` under Configuration),
+so an injection appended after a long benign preamble is still seen. Measured on 12 cases — 4
+injection styles × 3 positions (end, middle, three-quarters) inside a ~700-token benign
+document — the classifier flags **12/12** at both the 512- and 128-token window, and all 88
+attack-carrying documents in the test split are hard-blocked.
+
+The cost is on the other side: of 46 attack-free long documents in the test split, 15 are
+hard-blocked and 5 land in GRAY. Max-over-windows means a long benign document gets many
+independent chances to trip the block threshold, and roughly a third of them do. Short benign
+prompts are far safer (7 of 86 blocked). Reducing that rate — a blocking rule that needs more
+than one hostile window — is open work, tracked in `TASKS.md`.
 
 Caveat: n=20 is small and the attacks are curated, so read 100% detection as "no obvious gaps
 on these techniques," not a guarantee. Reproduce with:
@@ -132,21 +151,21 @@ The classifier is evaluated against the same 20 out-of-distribution prompts as a
 | Attack type | Examples | Pre-hoc expectation | Hard-blocked |
 |---|---|---|---|
 | Payload splitting | Fragmented instructions across sentence parts | Yes — tokens still present | 2/2 |
-| Persona / roleplay | DAN jailbreak, "pretend you are..." | Yes — matches training distribution | 1/2 (1 GRAY → judge) |
+| Persona / roleplay | DAN jailbreak, "pretend you are..." | Yes — matches training distribution | 2/2 |
 | Instruction nesting | Hidden directives in markdown/HTML comments | Yes — instruction tokens visible | 2/2 |
 | Code injection | Malicious instructions in code blocks | Yes — "ignore", "system prompt" tokens present | 2/2 |
 | Case manipulation | aLtErNaTiNg CaSe obfuscation | Yes — subword tokenizer normalises | 1/1 |
 | Semantic obfuscation | Hypothetical framing, indirect exfiltration | Partial — depends on phrasing | 3/3 |
 | Base64 encoding | Encoded payloads with decode instructions | No — payload opaque to tokenizer | 2/2 |
-| Unicode homoglyphs | Cyrillic/Coptic lookalike substitutions | No — tokenizer sees different tokens | 2/2 |
+| Unicode homoglyphs | Cyrillic/Coptic lookalike substitutions | No — tokenizer sees different tokens | 1/2 (1 GRAY → judge) |
 | Multilingual | French, Japanese, Spanish, Russian injections | No — assumed English-centric training data | 4/4 |
 
-**The three "No" expectations were wrong, instructively.** The classifier cannot decode a Base64 payload or read homoglyph-substituted text — that part of the reasoning holds — but it doesn't need to: the *scaffolding* around the payload ("decode and follow these instructions...") and the anomalous token sequences of encoded blobs and lookalike scripts are themselves strong distributional evidence of hostility. The multilingual premise was simply false: the training corpus (`deepset/prompt-injections`) already contains non-English injections. Two honest caveats: an attacker who strips the scaffolding (e.g. bare encoded text with no decode instruction) may still slip past the tokenizer, and fine-grained class labels degrade badly under obfuscation (65% exact-class accuracy, above). The GRAY→judge route remains the safety net for both cases — the judge *can* decode Base64, read Unicode, and understand multilingual prompts.
+**The three "No" expectations were wrong, instructively.** The classifier cannot decode a Base64 payload or read homoglyph-substituted text — that part of the reasoning holds — but it doesn't need to: the *scaffolding* around the payload ("decode and follow these instructions...") and the anomalous token sequences of encoded blobs and lookalike scripts are themselves strong distributional evidence of hostility. The multilingual premise was simply false: the training corpus (`deepset/prompt-injections`) already contains non-English injections. Two honest caveats: an attacker who strips the scaffolding (e.g. bare encoded text with no decode instruction) may still slip past the tokenizer, and fine-grained class labels degrade badly under obfuscation (70% exact-class accuracy, above). The GRAY→judge route remains the safety net for both cases — the judge *can* decode Base64, read Unicode, and understand multilingual prompts.
 
 ## Why This Design
 
 - **Hybrid classifier + LLM judge** — DeBERTa handles clear cases (~10ms), Claude judges the gray zone (10-20% of traffic). _Projected to cut LLM API costs by ~80-90% at that gray-zone rate. At 10K prompts/day: ~$3-6 hybrid vs ~$30 pure LLM._
-- **DeBERTa-v3 over BERT/RoBERTa** — disentangled attention + ELECTRA pretraining. _Disentangled attention matters for adversarial text where attackers manipulate word order and position. ELECTRA pretraining is more sample-efficient on small datasets (~1,270 examples)._
+- **DeBERTa-v3 over BERT/RoBERTa** — disentangled attention + ELECTRA pretraining. _Disentangled attention matters for adversarial text where attackers manipulate word order and position. ELECTRA pretraining is more sample-efficient on small datasets (~1,975 examples)._
 - **Three-zone routing (clean/gray/block)** — configurable thresholds (0.3/0.8 defaults). _Binary classification forces a single decision boundary; the gray zone lets you tune the cost of false positives (user friction) vs false negatives (security breach) per deployment._
 - **F1 macro as primary metric** — not accuracy. _Accuracy is dominated by the majority class. For security, a missed jailbreak matters as much as a missed injection, regardless of class frequency._
 - **SHAP explainability for audit** — token-level attribution on flagged prompts. _When the classifier blocks a legitimate prompt, support needs to explain why. SHAP runs in ~2-5 seconds — acceptable for post-hoc audit, not inference._

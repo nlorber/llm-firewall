@@ -1,43 +1,43 @@
 {
-  "accuracy": 0.9947643979057592,
-  "f1_macro": 0.9947054075867635,
-  "f1_weighted": 0.99474495983503,
+  "accuracy": 0.8654545454545455,
+  "f1_macro": 0.8658660928130779,
+  "f1_weighted": 0.8716764947700913,
   "confusion_matrix": [
     [
-      52,
-      0,
-      0,
-      0,
-      0
-    ],
-    [
-      0,
-      48,
-      0,
-      0,
-      0
-    ],
-    [
+      104,
+      23,
       1,
+      2,
+      2
+    ],
+    [
       0,
-      29,
+      38,
       0,
+      1,
+      0
+    ],
+    [
+      0,
+      2,
+      54,
+      0,
+      0
+    ],
+    [
+      0,
+      2,
+      4,
+      21,
       0
     ],
     [
       0,
       0,
       0,
-      45,
-      0
-    ],
-    [
       0,
-      0,
-      0,
-      0,
-      16
+      21
     ]
   ],
-  "classification_report": "              precision    recall  f1-score   support\n\n      benign       0.98      1.00      0.99        52\n   injection       1.00      1.00      1.00        48\n   jailbreak       1.00      0.97      0.98        30\nexfiltration       1.00      1.00      1.00        45\n  escalation       1.00      1.00      1.00        16\n\n    accuracy                           0.99       191\n   macro avg       1.00      0.99      0.99       191\nweighted avg       0.99      0.99      0.99       191\n"
+  "classification_report": "              precision    recall  f1-score   support\n\n      benign       1.00      0.79      0.88       132\n   injection       0.58      0.97      0.73        39\n   jailbreak       0.92      0.96      0.94        56\nexfiltration       0.88      0.78      0.82        27\n  escalation       0.91      1.00      0.95        21\n\n    accuracy                           0.87       275\n   macro avg       0.86      0.90      0.87       275\nweighted avg       0.90      0.87      0.87       275\n"
 }

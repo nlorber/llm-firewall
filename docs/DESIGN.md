@@ -54,7 +54,7 @@ is: don't fine-tune to *avoid* the LLM, fine-tune to *ration* it. See §9 and
 
 DeBERTa-v3's disentangled attention mechanism decomposes attention into content-to-content and position-to-content components. This matters for adversarial text where attackers deliberately manipulate word order ("instructions previous all ignore") — the model can attend to content meaning independently of positional expectations.
 
-The v3 variant uses ELECTRA-style replaced token detection during pretraining, which is more sample-efficient than masked language modeling. On a dataset of ~1,270 examples, this efficiency translates to better representations with less data.
+The v3 variant uses ELECTRA-style replaced token detection during pretraining, which is more sample-efficient than masked language modeling. On a dataset of ~1,975 examples, this efficiency translates to better representations with less data.
 
 At 86M parameters, DeBERTa-v3-base is actually smaller than BERT-base (110M), making inference faster while being more accurate on NLU benchmarks.
 
@@ -222,10 +222,11 @@ For a security classifier, a model that perfectly detects benign and injection b
 
 ### In-distribution vs. out-of-distribution
 
-The headline F1 is measured on a test split from the same synthetic generator as training, so it is an optimistic upper bound. To separate *detection* from *exact classification* under distribution shift, the classifier is also scored on a held-out set of hand-crafted obfuscated attacks (`data/adversarial/`, run via `firewall-robustness`). Two findings drive the design narrative:
+The headline F1 is measured on a test split drawn from the same sources as training (`deepset/prompt-injections`, `jackhhao/jailbreak-classification`, Claude-generated examples, and the constructed long documents), so it is an optimistic upper bound. To separate *detection* from *exact classification* under distribution shift, the classifier is also scored on a held-out set of hand-crafted obfuscated attacks (`data/adversarial/`, run via `firewall-robustness`). Three findings drive the design narrative:
 
-- **Detection recall generalizes** — obfuscated attacks (base64, homoglyphs, payload splitting) are still flagged as threats rather than waved through as CLEAN. This is the security-critical metric.
-- **Fine-grained class labeling degrades** — exact attack-class accuracy drops sharply out-of-distribution. The model knows *that* a prompt is hostile better than *which* attack it is.
+- **Detection recall generalizes** — obfuscated attacks (base64, homoglyphs, payload splitting) are still flagged as threats rather than waved through as CLEAN (20/20 on the adversarial set). This is the security-critical metric.
+- **Fine-grained class labeling degrades** — exact attack-class accuracy falls to 0.70 out-of-distribution. The model knows *that* a prompt is hostile better than *which* attack it is.
+- **Context dilution cuts both ways** — an attack spliced into a long benign document is caught (12/12 across 4 injection styles × 3 positions) only because such documents are in the training data; the same sensitivity hard-blocks 15 of 46 attack-free long documents. Max-over-windows gives a long benign prompt many independent chances to trip the threshold.
 
 This is also the strongest argument for the GRAY zone: a borderline obfuscated attack the classifier is unsure about routes to the judge instead of being silently passed.
 
