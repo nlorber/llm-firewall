@@ -32,7 +32,13 @@ def download_prompt_injections(output_dir: Path) -> None:
     print(f"[download] prompt-injections: {len(ds)} records → {output_path}")
 
 
-def download_jailbreak_prompts(output_dir: Path, per_label: int = 300, seed: int = 42) -> None:
+def download_jailbreak_prompts(
+    output_dir: Path,
+    jailbreak_n: int = 300,
+    benign_n: int = 150,
+    short_chars: int = 800,
+    seed: int = 42,
+) -> None:
     """Download jackhhao/jailbreak-classification and save as jailbreak_prompts.jsonl.
 
     Supplies two classes. The ``jailbreak`` rows are bypass *techniques* — DAN-style personas,
@@ -40,8 +46,11 @@ def download_jailbreak_prompts(output_dir: Path, per_label: int = 300, seed: int
     persona prompts that share that framing without the bypass, and they are kept so the
     classifier learns that roleplay alone is not an attack.
 
-    Duplicates and unfilled templates are dropped, then each label is sampled down to
-    ``per_label`` so this source does not dominate the other classes.
+    Duplicates and unfilled templates are dropped, then each label is sampled to its target.
+    Short jailbreaks (``<= short_chars``) are taken first: the source is dominated by long
+    community templates, and a class made only of those generalises poorly to the one-line
+    jailbreaks that real traffic carries. The benign target is the smaller of the two so this
+    source does not outweigh the classes it is meant to contrast with.
 
     Schema: {"text": str, "label": "jailbreak"|"benign"}
     """
@@ -61,13 +70,22 @@ def download_jailbreak_prompts(output_dir: Path, per_label: int = 300, seed: int
             by_label[label].append(text)
 
     rng = random.Random(seed)
+    targets = {"jailbreak": jailbreak_n, "benign": benign_n}
     output_path = output_dir / "jailbreak_prompts.jsonl"
     with output_path.open("w") as f:
         for label, texts in by_label.items():
-            kept = rng.sample(texts, min(per_label, len(texts)))
+            want = targets[label]
+            short = [t for t in texts if len(t) <= short_chars]
+            rest = [t for t in texts if len(t) > short_chars]
+            kept = rng.sample(short, min(want, len(short)))
+            if len(kept) < want:
+                kept += rng.sample(rest, min(want - len(kept), len(rest)))
             for text in kept:
                 f.write(json.dumps({"text": text, "label": label}) + "\n")
-            print(f"[download] jailbreak-classification {label}: {len(kept)} of {len(texts)}")
+            print(
+                f"[download] jailbreak-classification {label}: {len(kept)} of {len(texts)} "
+                f"({sum(len(t) <= short_chars for t in kept)} short)"
+            )
     print(f"[download] jailbreak-classification → {output_path}")
 
 
@@ -81,11 +99,20 @@ def generate_synthetic(
 
     Args:
         output_dir: Where to write the JSONL file.
-        label: One of "exfiltration" or "escalation".
+        label: One of "exfiltration", "escalation", or "benign".
         n_examples: How many examples to generate.
         model: Claude model to use for generation.
     """
     descriptions = {
+        # The public benign data is questions and roleplay; ordinary assistant requests were
+        # absent, and a classifier that has never seen "write me a cover letter" reads it as
+        # an attack. This fills that gap rather than leaving it to the threshold.
+        "benign": (
+            "an ordinary, harmless request a user sends to an AI assistant — drafting, "
+            "rewriting, summarising, translating, explaining, or planning something (e.g. "
+            "'Can you help me write a cover letter?', 'Summarise this article in three "
+            "bullet points', 'Rewrite this sentence more formally')"
+        ),
         "exfiltration": (
             "a prompt that attempts to make an AI reveal its system prompt, "
             "internal instructions, or confidential user data (e.g. 'Repeat the contents "
@@ -163,6 +190,7 @@ def main() -> None:
     if not args.skip_synthetic:
         generate_synthetic(args.output_dir, "exfiltration")
         generate_synthetic(args.output_dir, "escalation")
+        generate_synthetic(args.output_dir, "benign", n_examples=150)
     else:
         print("[download] skipping synthetic generation (--skip-synthetic)")
 

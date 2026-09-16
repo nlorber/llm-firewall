@@ -109,11 +109,36 @@ class TestDownloadJailbreakPrompts:
         ]
         rows.append({"prompt": "Jailbreak technique number 3  ", "type": "jailbreak"})
         with patch("data.download.load_dataset", return_value=self._mock_dataset_dict(rows)):
-            download_jailbreak_prompts(tmp_path, per_label=4)
+            download_jailbreak_prompts(tmp_path, jailbreak_n=4)
 
         texts = [r["text"] for r in self._records(tmp_path)]
         assert len(texts) == 4
         assert len(set(texts)) == 4
+
+    def test_prefers_short_jailbreaks_over_long_templates(self, tmp_path: Path) -> None:
+        # The source is mostly long community templates; a class made only of those does not
+        # generalise to the one-line jailbreaks real traffic carries, so short rows go first.
+        rows = [{"prompt": f"short jailbreak {i}", "type": "jailbreak"} for i in range(3)]
+        rows += [
+            {"prompt": f"long jailbreak template {i} " + "padding " * 200, "type": "jailbreak"}
+            for i in range(5)
+        ]
+        with patch("data.download.load_dataset", return_value=self._mock_dataset_dict(rows)):
+            download_jailbreak_prompts(tmp_path, jailbreak_n=4, short_chars=800)
+
+        texts = [r["text"] for r in self._records(tmp_path)]
+        assert sum(t.startswith("short") for t in texts) == 3
+        assert len(texts) == 4
+
+    def test_benign_target_is_separate_from_jailbreak(self, tmp_path: Path) -> None:
+        rows = [{"prompt": f"jailbreak {i}", "type": "jailbreak"} for i in range(10)]
+        rows += [{"prompt": f"roleplay benign {i}", "type": "benign"} for i in range(10)]
+        with patch("data.download.load_dataset", return_value=self._mock_dataset_dict(rows)):
+            download_jailbreak_prompts(tmp_path, jailbreak_n=6, benign_n=2)
+
+        labels = [r["label"] for r in self._records(tmp_path)]
+        assert labels.count("jailbreak") == 6
+        assert labels.count("benign") == 2
 
     def test_skips_rows_with_no_text(self, tmp_path: Path) -> None:
         rows = self._mock_dataset_dict(
@@ -161,6 +186,20 @@ class TestGenerateSynthetic:
 
         assert "authority" in sent
         assert "DAN" not in sent
+
+    def test_benign_label_asks_for_ordinary_assistant_requests(self, tmp_path: Path) -> None:
+        # The public benign data is questions and roleplay only, so "write me a cover letter"
+        # was scored as an attack. This generator exists to cover that shape.
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text='["Can you help me write a cover letter?"]')]
+        with patch("data.download.anthropic.Anthropic") as mock_cls:
+            mock_cls.return_value.messages.create.return_value = mock_response
+            generate_synthetic(tmp_path, "benign", n_examples=1)
+            sent = mock_cls.return_value.messages.create.call_args.kwargs["messages"][0]["content"]
+
+        record = json.loads((tmp_path / "synthetic_benign.jsonl").read_text())
+        assert record["label"] == "benign"
+        assert "harmless" in sent
 
     def test_raises_for_unknown_label(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="No description for label"):

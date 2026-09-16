@@ -24,9 +24,13 @@ assistant behaves.
 | Dataset | Hub ID | License | Notes |
 |---|---|---|---|
 | prompt-injections | `deepset/prompt-injections` | Apache 2.0 | ~546 injection + benign examples |
-| jailbreak-classification | `jackhhao/jailbreak-classification` | Apache 2.0 | Jailbreak techniques + roleplay benign rows; deduplicated, unfilled templates dropped, sampled to ~300 per label |
-| Synthetic (exfiltration) | Claude API generated | — | ~119 examples via `download.py` |
+| jailbreak-classification | `jackhhao/jailbreak-classification` | Apache 2.0 | Jailbreak techniques + roleplay benign rows; deduplicated, unfilled templates dropped, short prompts preferred, sampled to 300 jailbreak / 150 benign |
+| Synthetic (exfiltration) | Claude API generated | — | ~116 examples via `download.py` |
 | Synthetic (escalation) | Claude API generated | — | ~106 examples via `download.py` |
+| Synthetic (benign requests) | Claude API generated | — | ~125 examples via `download.py`; ordinary assistant requests (draft/rewrite/summarise/translate), a shape the public benign data does not cover |
+
+Counts are approximate: the synthetic sources are regenerated per run and the model returns
+roughly, not exactly, the number asked for.
 
 `JailbreakBench/JBB-Behaviors` was previously used for the `jailbreak` class. It was dropped:
 its rows are harmful *content* requests rather than jailbreak techniques, and both its
