@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from transformers import AutoModelForSequenceClassification, PreTrainedTokenizerFast
 
 from firewall.classifier.dataset import DEFAULT_MAX_LENGTH, NUM_LABELS
 
@@ -37,7 +37,10 @@ class FirewallClassifier:
             .to(self.device)
             .eval()
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)  # type: ignore[no-untyped-call]
+        # The tokenizer exactly as serialized with the checkpoint. AutoTokenizer rebuilds
+        # DeBERTa-v2's pipeline from spm.model without the saved NFKC normalizer, so fullwidth,
+        # ligature and homoglyph text would tokenize differently from training.
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(model_name_or_path)
         self.id2label: dict[int, str] = dict(self.model.config.id2label)
 
     def predict(self, texts: list[str]) -> list[dict[str, float]]:

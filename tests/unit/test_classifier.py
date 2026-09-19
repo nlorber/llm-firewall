@@ -92,7 +92,7 @@ class TestFirewallClassifier:
 
         with (
             patch("firewall.classifier.model.AutoModelForSequenceClassification") as mock_m,
-            patch("firewall.classifier.model.AutoTokenizer") as mock_t,
+            patch("firewall.classifier.model.PreTrainedTokenizerFast") as mock_t,
         ):
             mock_model_inst = MagicMock()
             mock_model_inst.config.id2label = {

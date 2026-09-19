@@ -207,6 +207,13 @@ class TestAdversarialRobustness:
         assert preamble_threat < DEFAULT_CLEAN_THRESHOLD  # the preamble alone is clean,
         assert attack_threat >= DEFAULT_CLEAN_THRESHOLD  # so it is the tail that is caught
 
+    def test_compatibility_characters_tokenize_as_their_plain_form(self, classifier) -> None:
+        """The checkpoint was trained with NFKC normalization, so fullwidth letters, ligatures
+        and roman-numeral homoglyphs must reach the model as the plain text they spell."""
+        tokenize = classifier.tokenizer.tokenize
+        assert tokenize("ＩＧＮＯＲＥ ﬁlters") == tokenize("IGNORE filters")
+        assert tokenize("Ⅰgnore all") == tokenize("Ignore all")
+
     # --- Aggregate detection rate ---
 
     def test_overall_detection_rate_above_50_percent(
