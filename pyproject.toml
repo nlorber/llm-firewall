@@ -17,11 +17,11 @@ classifiers = [
 dependencies = [
     # Deep learning + HuggingFace ecosystem
     "torch>=2.0,<3",
-    "transformers>=4.40,<5",
+    "transformers>=5.10,<6",
     # Classical ML
     "scikit-learn>=1.4,<2",
     # Agentic orchestration
-    "langgraph>=0.2,<1",
+    "langgraph>=1.0.10,<2",
     # LLM API (judge)
     "anthropic>=0.28,<1",
     # Config / .env loading
@@ -42,7 +42,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0,<9",
+    "pytest>=9.0.3,<10",
     "pytest-cov>=5.0,<6",
     "ruff>=0.4,<1",
     "mypy>=1.10,<2",
@@ -119,3 +119,10 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.uv]
+# tokenizers 0.23.1 stops encoding once max_length is reached, so `return_overflowing_tokens`
+# drops every window past the first overlap and the classifier never scores a long prompt's
+# tail (huggingface/tokenizers#2091). Lift once the upstream fix ships, then run the
+# integration suite: its long-preamble test is what catches this.
+constraint-dependencies = ["tokenizers<0.23.1"]

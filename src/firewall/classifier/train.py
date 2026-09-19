@@ -80,7 +80,7 @@ def train(config_path: str | Path) -> None:
     val_texts, val_labels = _load_jsonl(Path(config["val_path"]))
 
     tokenizer_name = config["model_name"]
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)  # type: ignore[no-untyped-call]
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     train_ds = FirewallDataset(train_texts, train_labels, tokenizer_name, config["max_length"])
     val_ds = FirewallDataset(val_texts, val_labels, tokenizer_name, config["max_length"])
 
@@ -96,7 +96,7 @@ def train(config_path: str | Path) -> None:
         per_device_train_batch_size=config["batch_size"],
         per_device_eval_batch_size=config["batch_size"],
         learning_rate=config["learning_rate"],
-        warmup_ratio=config["warmup_ratio"],
+        warmup_steps=config["warmup_ratio"],  # a float in [0, 1) is a ratio of total steps
         weight_decay=config["weight_decay"],
         fp16=config.get("fp16", False),
         eval_strategy="epoch",

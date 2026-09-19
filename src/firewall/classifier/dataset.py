@@ -30,7 +30,7 @@ class FirewallDataset(Dataset[dict[str, torch.Tensor]]):
         tokenizer_name: str = "microsoft/deberta-v3-base",
         max_length: int = DEFAULT_MAX_LENGTH,
     ) -> None:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)  # type: ignore[no-untyped-call]
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         encoding = tokenizer(
             texts,
             truncation=True,
