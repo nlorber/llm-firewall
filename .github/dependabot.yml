@@ -17,10 +17,10 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-      # transformers 5.17 requires tokenizers>=0.23.1, which the tokenizers
+      # transformers 5.16 requires tokenizers>=0.23.1, which the tokenizers
       # constraint in pyproject.toml rules out. Lift both together.
       - dependency-name: "transformers"
-        versions: [">=5.17"]
+        versions: [">=5.16"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
