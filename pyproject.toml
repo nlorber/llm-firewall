@@ -123,6 +123,7 @@ indent-style = "space"
 [tool.uv]
 # tokenizers 0.23.1 stops encoding once max_length is reached, so `return_overflowing_tokens`
 # drops every window past the first overlap and the classifier never scores a long prompt's
-# tail (huggingface/tokenizers#2091). Lift once the upstream fix ships, then run the
-# integration suite: its long-preamble test is what catches this.
+# tail (huggingface/tokenizers#2091). Lift once the upstream fix ships, along with the
+# transformers ignore in .github/dependabot.yml, then run the integration suite: its
+# long-preamble test is what catches this.
 constraint-dependencies = ["tokenizers<0.23.1"]
