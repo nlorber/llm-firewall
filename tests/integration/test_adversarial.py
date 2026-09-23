@@ -133,13 +133,15 @@ class TestAdversarialRobustness:
     """Run adversarial prompts through the classifier and verify detection."""
 
     @pytest.fixture(scope="class")
-    def classifier(self):
+    @classmethod
+    def classifier(cls):
         from firewall.classifier.model import load_classifier
 
         return load_classifier(str(MODEL_PATH))
 
     @pytest.fixture(scope="class")
-    def adversarial_prompts(self) -> list[dict[str, str]]:
+    @classmethod
+    def adversarial_prompts(cls) -> list[dict[str, str]]:
         return _load_adversarial()
 
     # --- Standard obfuscation (classifier should catch these) ---

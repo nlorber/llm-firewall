@@ -19,7 +19,8 @@ class TestRealInference:
     """Load the actual fine-tuned DeBERTa model and verify predictions."""
 
     @pytest.fixture(scope="class")
-    def classifier(self):
+    @classmethod
+    def classifier(cls):
         from firewall.classifier.model import load_classifier
 
         return load_classifier(str(MODEL_PATH))
