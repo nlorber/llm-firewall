@@ -21,7 +21,7 @@ dependencies = [
     # Classical ML
     "scikit-learn>=1.9.1,<2",
     # Agentic orchestration
-    "langgraph>=1.0.10,<2",
+    "langgraph>=1.2.12,<2",
     # LLM API (judge)
     "anthropic>=0.125.0,<1",
     # Config / .env loading
@@ -44,7 +44,7 @@ dependencies = [
 dev = [
     "pytest>=9.0.3,<10",
     "pytest-cov>=5.0,<6",
-    "ruff>=0.16.8,<1",
+    "ruff>=0.16.9,<1",
     "mypy>=1.20.2,<2",
     "types-PyYAML>=6.0,<7",
     "pre-commit>=3.7,<4",
